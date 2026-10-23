@@ -1,0 +1,18 @@
+{
+  "name": "wasm-worker-proto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web Worker + Rust/WASM deterministic task prototype",
+  "scripts": {
+    "build": "wasm-pack build --release --target web --out-dir pkg",
+    "serve": "python3 -m http.server 8080",
+    "test:rust": "cargo test",
+    "test:vectors": "node test/node-vectors.mjs",
+    "test:e2e": "node test/e2e.mjs",
+    "test": "npm run test:rust && npm run build && npm run test:vectors && npm run test:e2e"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}

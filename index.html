@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WASM Worker Prototipi</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { max-width: 760px; margin: 2rem auto; padding: 0 16px; }
+    h1 { font-size: 1.3rem; }
+    label { display: block; margin-top: .8rem; font-weight: 600; }
+    select, textarea, button { font: inherit; }
+    textarea { width: 100%; box-sizing: border-box; height: 4.5rem; font-family: ui-monospace, monospace; }
+    .row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; }
+    button { padding: .45rem .9rem; cursor: pointer; }
+    pre { background: rgba(127,127,127,.15); padding: .7rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; min-height: 3rem; }
+    .ok { color: #0a7d2c; } .err { color: #c0262d; }
+    .live { display: flex; align-items: center; gap: .6rem; margin-top: 1rem; }
+    .spinner { width: 18px; height: 18px; border: 3px solid rgba(127,127,127,.4); border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    body:not(.busy) .spinner { animation-play-state: paused; opacity: .35; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    small { opacity: .75; }
+  </style>
+</head>
+<body>
+  <h1>Tarayıcıda Web Worker + WASM prototipi</h1>
+
+  <div class="live">
+    <div class="spinner" aria-hidden="true"></div>
+    <span>Ana iş parçacığı canlı: kare sayacı <strong id="ticks">0</strong>
+      <small>(görev sürerken sayaç ve döner simge akmaya devam etmeli)</small></span>
+  </div>
+
+  <label for="module">Görev</label>
+  <select id="module">
+    <option value="sha_chain">sha_chain – SHA-256 hash zinciri</option>
+    <option value="matmul">matmul – tamsayı matris çarpımı</option>
+    <option value="debug_panic">debug_panic – kasıtlı panic (hata yolu testi)</option>
+  </select>
+
+  <label for="input">Girdi (JSON)</label>
+  <textarea id="input" spellcheck="false"></textarea>
+
+  <div class="row">
+    <label style="margin:0;font-weight:400"><input type="radio" name="impl" value="wasm" checked> WASM</label>
+    <label style="margin:0;font-weight:400"><input type="radio" name="impl" value="js"> Saf JS</label>
+    <button id="run">Çalıştır</button>
+    <button id="vectors">Test vektörlerini doğrula</button>
+    <button id="bench">WASM vs JS ölçümü</button>
+  </div>
+
+  <label>Durum: <span id="status">hazır</span></label>
+  <pre id="output"></pre>
+  <small id="timing"></small>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
