@@ -4,14 +4,19 @@
   "private": true,
   "type": "module",
   "description": "Tarayıcı tabanlı gönüllü hesaplama platformu: Rust/WASM görevleri, koordinatör, gönüllü sayfası, simülatör",
-  "workspaces": ["coordinator"],
-  "engines": { "node": ">=22.18" },
+  "workspaces": [
+    "coordinator",
+    "payments/x402-proto"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "build": "wasm-pack build --release --target web --out-dir pkg",
     "serve": "python3 -m http.server 8080",
     "coordinator": "npm --workspace coordinator start",
     "submit": "npm --workspace coordinator run submit --",
-    "typecheck": "npm --workspace coordinator run typecheck",
+    "typecheck": "npm --workspace coordinator run typecheck && npm --workspace payments/x402-proto run typecheck",
     "test:rust": "cargo test",
     "test:vectors": "node test/node-vectors.mjs",
     "test:e2e": "node test/e2e.mjs",
@@ -19,8 +24,9 @@
     "test:coordinator": "npm --workspace coordinator test",
     "test:volunteer": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 test/volunteer-e2e.mjs",
     "test:sim": "python3 -m pytest -q sim/tests",
-    "test:quick": "npm run test:shared && npm run test:coordinator && npm run test:sim",
-    "test": "npm run test:rust && npm run build && npm run test:vectors && npm run test:e2e && npm run test:quick && npm run test:volunteer"
+    "test:quick": "npm run test:shared && npm run test:coordinator && npm run test:payments && npm run test:sim",
+    "test": "npm run test:rust && npm run build && npm run test:vectors && npm run test:e2e && npm run test:quick && npm run test:volunteer",
+    "test:payments": "npm --workspace payments/x402-proto test"
   },
   "devDependencies": {
     "playwright": "^1.50.0"

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quick:
+    name: Sözleşmeler, koordinatör, simülatör
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sim/requirements.txt
+      - run: npm ci
+      - run: pip install -r sim/requirements.txt
+      - run: npm run typecheck
+      - run: npm run test:quick
+
+  browser:
+    name: Rust/WASM ve tarayıcı testleri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:rust
+      - run: npm run build
+      - run: npm run test:vectors
+      - run: npm run test:e2e
+      # pkg/ derlendiği için gönüllü sayfası testleri burada gerçek WASM ile çalışır.
+      - run: npm run test:volunteer
