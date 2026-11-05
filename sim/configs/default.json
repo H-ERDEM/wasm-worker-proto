@@ -1,0 +1,26 @@
+{
+  "_comment": "Simülatöre özgü parametreler. 'shared' alanı shared/config/default.json üzerine yazılır. base_rate ve oturum süreleri pilot ölçümlerle kalibre edilecek (yer tutucu değerler).",
+  "shared": {},
+  "workload": {
+    "n_dags": 20,
+    "tasks_per_dag": 50,
+    "shapes": ["chain", "fork_join", "layered"],
+    "modules": { "sha_chain": 0.7, "matmul": 0.3 },
+    "sha_iterations": [100000, 2000000],
+    "matmul_n": [64, 256],
+    "dag_files": []
+  },
+  "workers": {
+    "initial": 50,
+    "arrival_rate_per_s": 0.0,
+    "session_mean_s": null,
+    "close_prob": 0.5,
+    "speed_sigma": 0.5,
+    "speed_noise_sigma": 0.1,
+    "base_rate": { "sha_chain": 4000, "matmul": 500000, "debug_panic": 1 },
+    "network_ms": 20,
+    "load_ms": 30
+  },
+  "faults": { "f": 0.0, "s": 1.0, "collusion": false },
+  "max_time_s": 86400
+}
