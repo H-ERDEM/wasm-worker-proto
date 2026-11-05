@@ -24,7 +24,7 @@ before(async () => {
 after(() => browser?.close());
 
 /** Her test kendi koordinatörünü (bellek içi SQLite) ve kendi tarayıcı bağlamlarını kullanır. */
-async function setup(config = {}) {
+async function setup(config = {}, { expectedConsole = null } = {}) {
   const s = await createServer({ config: { heartbeatMs: 1000, missedHeartbeats: 2, taskTimeoutMs: 60000, ...config } });
   const contexts = [];
   const logs = [];
@@ -60,7 +60,8 @@ async function setup(config = {}) {
   const teardown = async () => {
     for (const c of contexts) await c.close().catch(() => {});
     await s.close();
-    assert.deepEqual(logs, [], "sayfada hata olmamalı");
+    const unexpected = expectedConsole ? logs.filter((l) => !expectedConsole.test(l)) : logs;
+    assert.deepEqual(unexpected, [], "sayfada beklenmeyen hata olmamalı");
   };
   return { s, openWorker, waitWorkers, submit, waitJob, replicas, teardown };
 }
@@ -186,12 +187,19 @@ test("deney modu fault=random&s=1: yanlış sonuç gerçek biçimde döner ve ac
 });
 
 test("debug_panic: hata raporlanır, worker toparlanır, görev max_replicas sonunda FAILED", async () => {
-  const t = await setup({ maxReplicas: 3 });
+  // WASM panic'i console_error_panic_hook ile konsola yazılır; bu test için beklenen bir çıktıdır.
+  const t = await setup({ maxReplicas: 3 }, { expectedConsole: /panicked at src\/lib\.rs/ });
   try {
     await t.openWorker();
     await t.waitWorkers(1);
     const failed = await t.waitJob(t.submit({ version: 0, tasks: [{ id: "p", module: "debug_panic", input: {} }] }));
     assert.equal(failed.status, "FAILED");
+    if (IMPL === "wasm") {
+      // Gerçek WASM'de panic bir WebAssembly.RuntimeError'dır: fatal işaretlenir, Web Worker yeniden başlar.
+      const reps = t.s.db.all("SELECT r.fatal FROM replicas r JOIN tasks k ON k.id = r.task_id WHERE k.job_id = ?", failed.jobId);
+      assert.equal(reps.length, 3);
+      assert.ok(reps.every((r) => r.fatal === 1));
+    }
     // Aynı worker sonraki işi yine de yapabilmeli
     const ok = await t.waitJob(t.submit(example("single-task.json")));
     assert.equal(ok.tasks[0].output.hash, HELLO_1000);
