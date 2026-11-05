@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gonullu-hesaplama/schemas/messages.v0.json",
+  "title": "Worker ↔ koordinatör WebSocket mesajları v0 (worker'dan gelenler)",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["type", "consent"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "hello" },
+        "workerId": { "type": "string", "maxLength": 64 },
+        "userAgent": { "type": "string", "maxLength": 512 },
+        "deviceClass": { "type": "string", "enum": ["desktop", "mobile", "tablet", "node", "unknown"] },
+        "impls": { "type": "array", "items": { "type": "string", "enum": ["wasm", "js"] } },
+        "consent": { "const": true }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["type", "replicaId", "status", "output", "durationMs"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "result" },
+        "replicaId": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["ok", "error"] },
+        "output": { "type": "string", "maxLength": 1048576 },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "impl": { "type": "string" },
+        "loadMs": { "type": "number", "minimum": 0 },
+        "fatal": { "type": "boolean" }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["ping", "pong"] },
+        "t": { "type": "number" }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["type", "available"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "status" },
+        "available": { "type": "boolean" }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "bye" },
+        "reason": { "type": "string", "maxLength": 256 }
+      }
+    }
+  ]
+}

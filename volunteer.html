@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gönüllü Hesaplama</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { max-width: 640px; margin: 2rem auto; padding: 0 16px; line-height: 1.45; }
+    h1 { font-size: 1.3rem; }
+    button, select { font: inherit; }
+    button { padding: .55rem 1rem; cursor: pointer; }
+    .card { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 1rem; margin-top: 1rem; }
+    .muted { opacity: .75; font-size: .92rem; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0; }
+    dt { font-weight: 600; } dd { margin: 0; word-break: break-all; }
+    .ok { color: #0a7d2c; } .warn { color: #b26b00; } .err { color: #c0262d; }
+    label { display: block; margin-top: .6rem; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Gönüllü hesaplama</h1>
+
+  <section id="consent" class="card">
+    <p>Bu sayfa, bir dönem projesi kapsamında tarayıcınızın işlem gücünü küçük hesaplama görevleri
+      (SHA-256 zinciri, tamsayı matris çarpımı) için kullanır. Görevler tarayıcının izole Web Worker
+      ortamında çalışır; dosyalarınıza, kameranıza ya da kişisel verilerinize erişilmez.</p>
+    <p class="muted">Sekmeyi kapattığınızda katılım sona erer. Görevlerin girdi ve çıktıları ile görev
+      süreleri ve tarayıcı türünüz araştırma amacıyla kaydedilir.</p>
+    <label>CPU kullanımı
+      <select id="cpu">
+        <option value="low">Düşük: görevler arası 5 sn ara</option>
+        <option value="medium" selected>Orta: görevler arası 1 sn ara</option>
+        <option value="high">Yüksek: ara yok</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="chargingOnly"> Mobilde yalnızca şarjdayken çalış</label>
+    <p><button id="agree">Katılıyorum, başlat</button></p>
+  </section>
+
+  <section id="panel" class="card" hidden>
+    <dl>
+      <dt>Bağlantı</dt><dd id="conn">—</dd>
+      <dt>Durum</dt><dd id="state">—</dd>
+      <dt>Worker</dt><dd id="wid">—</dd>
+      <dt>Tamamlanan</dt><dd id="done">0</dd>
+      <dt>Son görev</dt><dd id="last">—</dd>
+      <dt>Uygulama</dt><dd id="impl">—</dd>
+    </dl>
+    <p><button id="stop">Durdur</button></p>
+  </section>
+
+  <p class="muted">Projenin kendisi için: <a href="./index.html">WASM prototip sayfası</a></p>
+
+  <script type="module" src="./volunteer.js"></script>
+</body>
+</html>

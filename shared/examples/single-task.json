@@ -1,0 +1,7 @@
+{
+  "version": 0,
+  "jobId": "ornek-tek-gorev",
+  "tasks": [
+    { "id": "t1", "module": "sha_chain", "input": { "seed": "hello", "iterations": 1000 }, "deps": [] }
+  ]
+}

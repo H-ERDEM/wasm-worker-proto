@@ -1,0 +1,22 @@
+{
+  "_comment": "Koordinatör ve simülatörün ortak parametreleri. Değerler Kapsam Dokümanı'ndan; max_replicas danışman onayı bekliyor.",
+  "scheduler": "fifo",
+  "verifier": "accept_first",
+  "heartbeatMs": 5000,
+  "missedHeartbeats": 2,
+  "taskTimeoutMs": 120000,
+  "maxReplicas": 5,
+  "reputation": {
+    "tau": 0.95,
+    "alphaMin": 10,
+    "lambda": 0.99,
+    "w": 5
+  },
+  "spotCheckRate": 0.10,
+  "unitPrice": 0.001,
+  "costFunctions": {
+    "sha_chain": "iterations",
+    "matmul": "n^3",
+    "debug_panic": "1"
+  }
+}
