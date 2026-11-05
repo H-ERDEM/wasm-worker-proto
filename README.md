@@ -300,4 +300,4 @@ wasm-worker-proto/
 
 ## Lisans
 
-Henüz bir lisans belirtilmemiştir (dönem projesi). Paylaşım ve yeniden kullanım koşulları için depo sahibine danışın.
+MIT. Ayrıntılar için [`LICENSE`](LICENSE) dosyasına bakın. Kod, simülatör ve deney verisi bu depoda açık olarak yayımlanır.

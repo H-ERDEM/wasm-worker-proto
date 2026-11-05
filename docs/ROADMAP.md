@@ -29,12 +29,16 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | Tarih | Karar | Gerekçe |
 |---|---|---|
 | 2026-11-05 | İtibar sayaçları `alpha`/`beta` olarak adlandırıldı | Hata modelindeki `f`, `s` ile çakışmayı önlemek için (rapor §0.2) |
-| 2026-11-05 | `maxReplicas = 5` varsayılan (danışman onayı bekliyor) | Üç farklı sonuç durumunun tanımlanması |
+| 2026-11-05 | `maxReplicas = 5`; toplam deneme sınırı 15 | Uyuşmazlığın sonsuza kadar sürmemesi; sınıra ulaşan görev FAILED ve ayrı metrik (Kapsam v2 §5) |
 | 2026-11-05 | Parametre dosyası YAML yerine JSON | Node ve Python ek bağımlılık olmadan okur |
 | 2026-11-05 | SQLite için `better-sqlite3` yerine Node'un yerleşik `node:sqlite` modülü | Derlenmesi gereken yerel bağımlılık yok |
 | 2026-11-05 | TypeScript derleme adımı yok; Node'un tip ayıklaması, `tsc --noEmit` ile kontrol | Daha az araç |
 | 2026-11-05 | Mevcut dosyalar kökte bırakıldı (planlanan `tasks/` ve `worker-web/` taşıması yapılmadı) | README yolları, `pkg/` çıktısı ve 5. hafta testleri bozulmasın; gerekirse `git mv` ile sonra yapılır |
 | 2026-11-05 | Protokole `status {available}` mesajı eklendi | CPU sınırı ve şarj koşulu: worker müsait değilken görev atanmasın |
 | 2026-11-05 | Koordinatör gönüllü sayfasını da sunar (`/` → `volunteer.html`) | Telefon tek adres açar; ayrı statik sunucu gerekmez |
-| 2026-11-05 | x402 prototipinde `exact` şeması; `upto` şeması danışmana not edildi | `upto`, A seçeneğini (üst sınır + iade) protokolün içinde karşılayabilir (bkz. `payments/x402-proto/README.md`) |
+| 2026-11-05 | Alıcı ödemesi: x402 `exact` şemasıyla üst sınır + iade; `upto` 10. haftada alternatif | `upto` çekirdek spesifikasyonda ayrı şema belgesi olarak var ama Solana'da emanet (escrow) hesabı gerektiriyor (bkz. `payments/x402-proto/README.md`) |
+| 2026-11-05 | Ajan ve MCP sunucusu Could → Should | Proje başlığının parçası; 10–11. haftalardaki merkezi yeriyle uyumlu (Kapsam v2 §7) |
+| 2026-11-05 | Lisans MIT; kod, simülatör ve deney verisi GitHub'da | Açık, yeniden üretilebilir çalışma (Kapsam v2 §8) |
+| 2026-11-05 | Ek karşılaştırma tabanları: BOINC adaptive ve `accept_first`, yalnızca simülatörde | BOINC kuralı kaynak koddan teyit edildi (N < 10 her zaman replike, N ≥ 10 ise 1/N olasılıkla) |
+| 2026-11-05 | Tüm kararlar proje ekibi tarafından alınır | Danışman kararları ekibe bıraktı; açık nokta listesi kaldırıldı |
 | 2026-11-05 | Simülatörde hata kararları akıştan değil (tohum, worker, görev) özetinden | Sıralamadan bağımsız ortak rastgele sayılar (CRN): aynı worker aynı görevde her stratejide aynı kararı verir |

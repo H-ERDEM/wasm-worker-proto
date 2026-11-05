@@ -5,7 +5,9 @@
 **Kapsanan dönem:** 6. hafta (Literatür taraması II, mimari, x402 prototipi) ve 7. hafta (simülatör iskeleti ve koordinatör çekirdeği, paralel)
 **Dayanılan belgeler:** Haftalık Proje Planı, Kapsam Dokümanı, Literatür Notları I, `wasm-worker-proto` README
 
-> Durum sütunları **Planlandı** olarak işaretlidir. Her haftanın sonunda *Tamamlandı / Kısmen / Ertelendi* olarak güncellenirse bu belge danışman için ilerleme kaydı olarak da kullanılabilir.
+> Durum sütunları **Planlandı** olarak işaretlidir. Her haftanın sonunda *Tamamlandı / Kısmen / Ertelendi* olarak güncellenirse bu belge ilerleme kaydı olarak da kullanılabilir.
+
+> **Güncelleme (5 Kasım 2026).** Bu belge 6. hafta başlamadan önce yazılmış bir plandır ve tarihsel kayıt olarak olduğu gibi bırakılmıştır. Planda "açık nokta" ya da "danışmandan beklenen karar" diye geçen maddelerin hepsine 6. haftada proje ekibi karar verdi; güncel ve bağlayıcı metin **Kapsam Dokümanı v2 (Hafta 6)**'dır. Özet olarak: alıcı ödemesi A seçeneği (üst sınır + iade, `exact` şeması); ajan ve MCP **Should**; `maxReplicas = 5` ve toplam deneme sınırı 15; lisans MIT; ara demo 9. hafta. Kararların tam listesi Kapsam v2 §8'de, karar kaydı `docs/ROADMAP.md` içindedir. §4 bu belgenin sonunda güncellenmiştir.
 
 ---
 
@@ -28,7 +30,7 @@ Belgeler birlikte okunurken fark edildi. Küçük sorunlar, ancak bir kısmı b�
 2. **Demo haftası uyuşmazlığı.** Kilometre taşları paragrafı ara demoyu 8. haftada, haftalık tablo 9. haftada gösteriyor. Biri seçilmeli (paralel çalışma düşünülünce tablodaki 9. hafta daha gerçekçi).
 3. **Worker ödeme modeli** planda 6. haftanın kararı olarak geçiyor, ancak kapsam dokümanında zaten kararlaştırılmış (sabit birim fiyat; kabul edilen sonuçla eşleşen her kopya ve geçilen her sınama işi ödenir; ödeme iş bitince toplu yapılır). 6. haftada yalnızca maliyet modeli olarak biçimselleştirilmesi yeterli (§1.4.5).
 4. **Tanımsız beraberlik kuralı.** Sabit 2'li strateji uyuşmazlıkta üçüncü kopyaya geçiyor, sabit 3'lü "en az iki eşleşen" istiyor; ancak üç sonucun da farklı olduğu durum (rastgele hata modelinde f = %30'da mümkün) tanımlı değil. Bir üst kopya sınırı (ör. `max_replicas = 5`, BOINC'teki `max_error_instances` [2] karşılığı) tanımlanmalı; sınıra ulaşan görev başarısız sayılıp yeniden verilmeli ve bu olaylar ayrı bir metrik olarak sayılmalı.
-5. **Kapsam dokümanından devralınan açık noktalar:** (2) ajan/MCP'nin önceliği (Could), proje başlığındaki ve 10–11. haftalardaki merkezi yeriyle çelişiyor; (3) iş maliyeti ancak iş bitince belli olurken alıcının x402 ile ne kadar ödeyeceği. İkisi de bir öneriyle birlikte 6. hafta danışman görüşmesine götürülecek (§1.4.5, §1.7).
+5. **Kapsam dokümanından devralınan açık noktalar:** (2) ajan/MCP'nin önceliği (Could), proje başlığındaki ve 10–11. haftalardaki merkezi yeriyle çelişiyor; (3) iş maliyeti ancak iş bitince belli olurken alıcının x402 ile ne kadar ödeyeceği. *İkisine de 6. haftada karar verildi: ajan ve MCP Should, alıcı ödemesi üst sınır + iade (§4).*
 
 ---
 
@@ -233,7 +235,7 @@ Worker tarafı (karar verilmiş durumda): **ödenen birim** başına birim fiyat
 
 `C_iş = p × (eşleşen kopyalar + işe yansıtılan geçilmiş sınama işleri)`
 
-Alıcı tarafı (açık nokta 3). x402 akışı istek anında bir fiyat bekliyor, ancak `C_iş` ancak iş bitince belli oluyor. Danışmana sunulacak iki seçenek:
+Alıcı tarafı. x402 akışı istek anında bir fiyat bekliyor, ancak `C_iş` ancak iş bitince belli oluyor. Değerlendirilen iki seçenek (**karar: A seçeneği**):
 
 | Seçenek | Mekanizma | Artıları | Eksileri |
 |---|---|---|---|
@@ -270,7 +272,7 @@ Kurulum adımları:
 1. Kökte workspaces içeren bir `package.json` (`worker-web`, `coordinator`, `payments/x402-proto`); README'deki betikler (`build`, `test:rust`, `test:vectors`, `test:e2e`) kökten çalışmaya devam etmeli.
 2. Görev paketi iki hedef için derlenir: `--target web` (worker sayfası, şu anki gibi) ve sınama işi kâhini için Node'da yüklenebilen bir hedef. README'deki `test:vectors` WASM'i zaten Node'da çalıştırıyor; mümkünse ikinci bir derleme eklemek yerine o yükleme kodu yeniden kullanılmalı.
 3. CI (GitHub Actions): Rust testleri, vektör testleri, Playwright Chromium uçtan uca testleri, Python testleri (7. haftadan itibaren).
-4. Bir lisans eklenmeli (README'de henüz belirtilmemiş); üniversitenin bir tercihi olup olmadığı danışmana sorulmalı.
+4. Bir lisans eklenmeli. **Karar: MIT** (Kapsam v2 §8); `LICENSE` dosyası ve README'ye not eklenecek.
 5. Devnet anahtarları için `.env.example`; gerçek anahtar çiftleri asla commit edilmez.
 
 ### 1.6 Solana Devnet'te x402 prototipi (Ç6.6)
@@ -306,7 +308,7 @@ Adımlar:
 
 **Kabul ölçütü:** Devnet'te doğrulanabilir imzası olan bir başarılı ödemeli istek ve doğru biçimde 402 ya da hata döndüren üç hata durumu. Danışman sunumuna 1–2 dakikalık bir ekran kaydı eklenir.
 
-### 1.7 Danışman sunumu taslağı (Ç6.3)
+### 1.7 Literatür sunumu taslağı (Ç6.3)
 
 1. Problem ve motivasyon (kapsam §1)
 2. Araştırma soruları RQ1–RQ3
@@ -318,17 +320,19 @@ Adımlar:
 8. Karşılaştırma tabloları A ve B
 9. Literatürdeki boşluk ve [17] sonrası daraltılmış yenilik iddiası
 10. Mimariye genel bakış ve x402 prototipi demosu
-11. **Gereken kararlar:** alıcı ödemesi A/B; ajan/MCP önceliği; rapor formatı; beraberlik/`max_replicas` kuralı
+11. **Alınan kararlar:** alıcı ödemesi (üst sınır + iade); ajan/MCP önceliği (Should); `maxReplicas = 5`; lisans ve teslim biçimi; ara demo 9. hafta
+
+Sunum 14 slayt olarak hazırlandı. Planın 7. maddesine Golem gWASM, Truebit, Gridcoin ve MODICUM eklendi; 9. madde bu kaynaklara göre daha da daraltıldı.
 
 ### 1.8 6. hafta tamamlanma ölçütleri
 
-- [ ] Literatür Notları II, Notları I ile aynı yapıda `docs/` altına eklendi
-- [ ] Tablo A ve B tamamlandı; kaynaksız hücre yok
-- [ ] Sunum yapıldı; danışman kararları kapsam dokümanının karar tablosuna işlendi
-- [ ] DAG şeması v0, mesaj şeması v0, veri modeli ve maliyet modelini içeren mimari dokümanı hazır
-- [ ] Monorepo derleniyor; mevcut 8 vektör CI'da geçiyor
-- [ ] Devnet'te x402 ödemesi gösterildi; imza kaydedildi
-- [ ] Kapsam dokümanı düzeltildi (§0.2, 1–4. maddeler)
+- [x] Literatür Notları II yazıldı ve Notları I ile tek belgede birleştirildi ([19]–[32])
+- [x] Tablo A ve B tamamlandı; kaynaksız hücre yok
+- [x] Sunum hazırlandı; kararlar Kapsam Dokümanı v2 §8'e ve `docs/ROADMAP.md` karar kaydına işlendi
+- [x] DAG şeması v0, mesaj şeması v0, veri modeli ve maliyet modelini içeren mimari dokümanı hazır
+- [x] Monorepo derleniyor; mevcut 8 vektör CI'da geçiyor
+- [ ] Devnet'te x402 ödemesi gösterildi; imza kaydedildi *(kod ve ağsız testler hazır; gerçek ödeme elle yapılacak)*
+- [x] Kapsam dokümanı v2 olarak güncellendi (gösterim, maxReplicas, öncelik, alıcı ödemesi, kaynakça)
 
 ---
 
@@ -516,17 +520,22 @@ Tüm mesajlar ortak JSON Schema ile doğrulanır; geçersiz bir mesaj bağlantı
 | Tarayıcılarda zamanlayıcı yuvarlaması | Hatalı hız kalibrasyonu | Yalnızca uzun görevlerden kalibrasyon (README önerisi); `durationMs` ve `loadMs` ayrı saklanır |
 | Sınama işinin ayırt edilemezliği varsayım | RQ2 sonuçları iyimser çıkabilir | Sınama işleri için aynı modül ve girdi boyutu dağılımı; aynı mesaj biçimi; sınırlılık olarak raporlanır (kapsam §5) |
 | Gösterim çakışmasının (§0.2) koda taşınması | İtibar hesabında hata | İtibar kodu yazılmadan önce, 6. haftada α/β'ya geçilir |
-| Ajan/MCP kaynaklı kapsam baskısı | Ana deneyler gecikir | Önceliklerle ilgili danışman kararı 6. haftada alınır (§1.7) |
+| Ajan/MCP kaynaklı kapsam baskısı | Ana deneyler gecikir | Ajan ve MCP Should önceliğinde; zaman yetmezse önce Could maddeleri, sonra ajanın doğal dil kısmı kısılır (Kapsam v2 §7) |
 
 ---
 
-## 4. Danışmandan Beklenen Kararlar (6. hafta görüşmesi)
+## 4. 6. Haftada Alınan Kararlar
 
-1. **Alıcı ödemesi:** A seçeneği (üst sınır + iade, önerilen) ya da B seçeneği (strateji başına sabit fiyat).
-2. **Yapay zekâ ajanı ve MCP önceliği:** "Could" olarak kalsın (kapsam dokümanı) ya da "Should"a yükseltilsin (proje başlığı, 10–11. haftalar).
-3. **Beraberlik kuralı:** `max_replicas` (önerilen 5) ve başarısız görevlerin metriklere nasıl yansıyacağının onayı.
-4. **Rapor formatı:** yapı, uzunluk, kod ve verinin teslim biçimi.
-5. Repo için **lisans**.
+Planın bu bölümü "danışmandan beklenen kararlar" listesiydi. Kararlar proje ekibine bırakıldığı için ekip hepsine karar verdi (5 Kasım 2026). Bağlayıcı metin Kapsam Dokümanı v2 §8'dir; burada yalnızca sonuçlar özetlenir.
+
+| Konu | Karar |
+|---|---|
+| Alıcı ödemesi | **A seçeneği:** x402 `exact` şemasıyla üst sınır ödenir, iş bitince fark iade edilir. Üst sınır = `p × N × maxReplicas / (1 − q)`. `upto` şeması 10. haftada alternatif olarak denenir. |
+| Ajan ve MCP önceliği | **Should.** Proje başlığının parçası; 10–11. haftalardaki yeriyle uyumlu. Zaman yetmezse önce Could maddeleri, sonra ajanın doğal dil kısmı kısılır; MCP sunucusu ve x402 ödemesi korunur. |
+| Beraberlik kuralı | `maxReplicas = 5`, toplam deneme sınırı 15. Sınıra ulaşan görev FAILED sayılır ve ayrı bir metrik olarak raporlanır. |
+| Rapor ve teslim | Final raporu, kaynak kod, simülatör, deney verisi ve grafikler; her deneyi yeniden üretecek betiklerle GitHub'da. Ara demo 9. hafta. |
+| Lisans | MIT. |
+| Ek karşılaştırma tabanları | BOINC adaptive replication ve `accept_first`, yalnızca simülatörde (420 ek koşu). BOINC kuralı kaynak koddan teyit edildi. |
 
 ---
 

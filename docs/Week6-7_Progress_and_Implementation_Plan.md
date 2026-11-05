@@ -5,7 +5,9 @@
 **Period covered:** Week 6 (Literature II, architecture, x402 prototype) and Week 7 (simulator skeleton and coordinator core, in parallel)
 **Source documents:** Weekly Project Plan, Scope Document (*Kapsam Dokümanı*), Literature Notes I, `wasm-worker-proto` README
 
-> Status columns are marked **Planned**. Update them to *Done / Partial / Moved* at the end of each week so this file also serves as the progress log for the advisor.
+> Status columns are marked **Planned**. Update them to *Done / Partial / Moved* at the end of each week so this file also serves as the progress log.
+
+> **Update (5 November 2026).** This document is the plan written before Week 6 started and is kept as a historical record. Every item it lists as an "open point" or a "decision requested from the advisor" was decided by the project team in Week 6; the current and binding text is **Scope Document v2 (Week 6)**. In short: buyer payment follows option A (cap + refund, `exact` scheme); agent and MCP are **Should**; `maxReplicas = 5` with an attempt cap of 15; the licence is MIT; the interim demo is in Week 9. The full list is in Scope v2 §8 and the decision log in `docs/ROADMAP.md`. §4 at the end of this document has been updated.
 
 ---
 
@@ -28,7 +30,7 @@ These were found while cross-reading the documents. They are small, but some of 
 2. **Demo week mismatch.** The milestones paragraph says the interim demo is in Week 8; the weekly table puts it in Week 9. Pick one (the table, Week 9, is more realistic given the parallel tracks).
 3. **Worker payment model** is listed as a Week 6 decision in the plan but is already decided in the scope document (fixed unit price, paid per matching copy and passed spot-check, batch payout at job completion). Week 6 only needs to formalize it as a cost model (§1.4.5).
 4. **Undefined tie rule.** Fixed-2 escalates to a third copy on disagreement and fixed-3 needs "at least two matching", but neither says what happens when all three results differ (possible in the random fault model at f = 30 %). Define a maximum replica count (e.g. `max_replicas = 5`, analogous to BOINC's `max_error_instances` [2]) after which the task is marked failed and re-issued, and count these events as a metric.
-5. **Open points carried from the scope document:** (2) priority of agent/MCP (Could) vs. its central place in the project title and in Weeks 10–11; (3) how much the buyer pays via x402 when cost is only known at job completion. Both go to the Week 6 advisor meeting with a proposal (§1.4.5, §1.7).
+5. **Open points carried from the scope document:** (2) priority of agent/MCP (Could) vs. its central place in the project title and in Weeks 10–11; (3) how much the buyer pays via x402 when cost is only known at job completion. *Both were decided in Week 6: agent and MCP are Should, and buyer payment is cap + refund (§4).*
 
 ---
 
@@ -233,7 +235,7 @@ Worker side (already decided): unit price `p` per **paid unit**, where a paid un
 
 `C_job = p × (matching replicas + passed spot-checks charged to the job)`
 
-Buyer side (open point 3). The x402 flow expects a price at request time, but `C_job` is known only at completion. Two options for the advisor:
+Buyer side. The x402 flow expects a price at request time, but `C_job` is known only at completion. The two options considered (**decision: option A**):
 
 | Option | Mechanism | Pros | Cons |
 |---|---|---|---|
@@ -270,7 +272,7 @@ Set-up tasks:
 1. Root `package.json` with workspaces (`worker-web`, `coordinator`, `payments/x402-proto`); keep the README scripts (`build`, `test:rust`, `test:vectors`, `test:e2e`) working from the root.
 2. Build the task crate for two targets: `--target web` (worker page, as now) and a target loadable in Node for the spot-check oracle. The README's `test:vectors` already runs the WASM in Node; reuse that loading code rather than adding a second build if possible.
 3. CI (GitHub Actions): Rust tests, vector tests, Playwright Chromium e2e, Python tests (from Week 7).
-4. Add a licence (the README says none is specified yet); ask the advisor whether the university has a preference.
+4. Add a licence. **Decision: MIT** (Scope v2 §8); a `LICENSE` file and a README note will be added.
 5. `.env.example` for Devnet keys; real keypairs are never committed.
 
 ### 1.6 x402 prototype on Solana Devnet (D6.6)
@@ -304,9 +306,9 @@ Steps:
 6. Test failure paths: insufficient balance, wrong network, replayed payment header. Each must leave the resource unserved.
 7. **Stretch (useful for Week 10):** a script that sends an SPL transfer from the platform wallet to a "worker" wallet. This is the worker payout path and is separate from x402.
 
-**Acceptance:** one successful paid request with a verifiable Devnet signature, and three failure cases that correctly return 402 or an error. A 1–2 minute screen recording goes into the advisor presentation.
+**Acceptance:** one successful paid request with a verifiable Devnet signature, and three failure cases that correctly return 402 or an error. A 1–2 minute screen recording goes into the Week 6 deliverable.
 
-### 1.7 Advisor presentation outline (D6.3)
+### 1.7 Literature presentation outline (D6.3)
 
 1. Problem and motivation (scope §1)
 2. Research questions RQ1–RQ3
@@ -318,17 +320,19 @@ Steps:
 8. Comparison tables A and B
 9. Literature gap and the novelty claim (narrowed after [17])
 10. Architecture overview and x402 prototype demo
-11. **Decisions needed:** buyer payment option A/B; priority of agent/MCP; report format; tie/`max_replicas` rule
+11. **Decisions taken:** buyer payment (cap + refund); priority of agent/MCP (Should); `maxReplicas = 5`; licence and submission format; interim demo in Week 9
+
+The presentation was built as 14 slides. Golem gWASM, Truebit, Gridcoin and MODICUM were added to item 7, and item 9 was narrowed further in light of those sources.
 
 ### 1.8 Week 6 definition of done
 
-- [ ] Literature Notes II committed to `docs/`, same structure as Notes I
-- [ ] Tables A and B complete; no unsourced cell
-- [ ] Presentation delivered; advisor decisions recorded in the scope document's decisions table
-- [ ] Architecture document with DAG schema v0, message schema v0, data model and cost model
-- [ ] Monorepo builds; existing 8 vectors pass in CI
-- [ ] x402 Devnet payment demonstrated; signature recorded
-- [ ] Scope document corrected (§0.2 issues 1–4)
+- [x] Literature Notes II written and merged with Notes I into a single document ([19]–[32])
+- [x] Tables A and B complete; no unsourced cell
+- [x] Presentation prepared; decisions recorded in Scope Document v2 §8 and the decision log in `docs/ROADMAP.md`
+- [x] Architecture document with DAG schema v0, message schema v0, data model and cost model
+- [x] Monorepo builds; existing 8 vectors pass in CI
+- [ ] x402 Devnet payment demonstrated; signature recorded *(code and offline tests ready; the real payment is done by hand)*
+- [x] Scope document updated as v2 (notation, maxReplicas, priority, buyer payment, bibliography)
 
 ---
 
@@ -516,17 +520,22 @@ All messages are validated against the shared JSON Schema; an invalid message cl
 | Timer coarsening in browsers | Bad speed calibration | Calibrate only from long tasks (README guidance); store `durationMs` and `loadMs` separately |
 | Spot-check indistinguishability is assumed | RQ2 results optimistic | Same module and input-size distribution for spot-checks; same message format; keep it as a stated limitation (scope §5) |
 | Notation collision (§0.2) carried into code | Reputation bugs | Rename to α/β in Week 6 before any reputation code is written |
-| Scope pressure from agent/MCP | Core experiments delayed | Get the advisor's decision on priorities in Week 6 (§1.7) |
+| Scope pressure from agent/MCP | Core experiments delayed | Agent and MCP are Should; if time runs short the Could items go first, then the agent's natural-language part (Scope v2 §7) |
 
 ---
 
-## 4. Decisions Requested from the Advisor (Week 6 meeting)
+## 4. Decisions Taken in Week 6
 
-1. **Buyer payment:** option A (cap + refund, recommended) or option B (fixed price per strategy).
-2. **Priority of AI agent and MCP:** keep as "Could" (scope document) or raise to "Should" (project title, Weeks 10–11).
-3. **Tie rule:** confirm `max_replicas` (proposed 5) and how failed tasks count in the metrics.
-4. **Report format:** structure, length, and how code and data are submitted.
-5. **Licence** for the repository.
+This section used to be the list of decisions requested from the advisor. The decisions were left to the project team, which settled all of them on 5 November 2026. The binding text is Scope Document v2 §8; only the outcomes are summarised here.
+
+| Topic | Decision |
+|---|---|
+| Buyer payment | **Option A:** the buyer pays a cap via the x402 `exact` scheme and the difference is refunded at job completion. Cap = `p × N × maxReplicas / (1 − q)`. The `upto` scheme will be tried as an alternative in Week 10. |
+| Priority of agent and MCP | **Should.** It is part of the project title and matches its place in Weeks 10–11. If time runs short, the Could items are cut first, then the agent's natural-language part; the MCP server and x402 payment are kept. |
+| Tie rule | `maxReplicas = 5` with an attempt cap of 15. A task that hits the cap is marked FAILED and reported as a separate metric. |
+| Report and submission | Final report, source code, simulator, experiment data and figures, with scripts that reproduce every experiment, on GitHub. Interim demo in Week 9. |
+| Licence | MIT. |
+| Extra baselines | BOINC adaptive replication and `accept_first`, simulator only (420 extra runs). The BOINC rule was confirmed from the source code. |
 
 ---
 
