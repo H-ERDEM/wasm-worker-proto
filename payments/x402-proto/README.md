@@ -22,7 +22,7 @@ Sahte bir facilitator ile şunları doğrular: ödemesiz istek 402 alır; `PAYME
 2. **Test USDC:** <https://faucet.circle.com> adresinde ağ olarak **Solana Devnet**'i seçip `.env` içindeki `BUYER_ADDRESS` adresine USDC isteyin.
 3. **Sunucu:** `npm run server -w payments/x402-proto`. Sunucu `http://127.0.0.1:4021/demo` adresinde açılır.
 4. **İstemci** (ikinci terminalde): `npm run client -w payments/x402-proto`. Beklenen çıktı `Durum: 200`, kesinleşme bilgisi ve Solana gezgini bağlantısıdır.
-5. **Kanıt:** Sunucu her ödemeyi `payments.log` dosyasına yazar (işlem imzası, ödeyen, ağ). Gezgin bağlantısının ekran görüntüsünü ya da kısa bir ekran kaydını danışman sunumuna ekleyin.
+5. **Kanıt:** Sunucu her ödemeyi `payments.log` dosyasına yazar (işlem imzası, ödeyen, ağ). Gezgin bağlantısının ekran görüntüsünü ya da kısa bir ekran kaydını Hafta 6 teslimine ekleyin.
 
 **Hata yolları (kabul ölçütü):**
 
@@ -32,6 +32,14 @@ Sahte bir facilitator ile şunları doğrular: ödemesiz istek 402 alır; `PAYME
 | Yanlış ağ | `server.ts` içinde ağı mainnet yapın | İstemci politikası reddeder, ödeme yapılmaz |
 | Tekrarlanan ödeme | Aynı `PAYMENT-SIGNATURE` başlığını ikinci kez gönderin | Facilitator reddeder |
 
-## Alıcı ödemesi kararı için not
+## Alıcı ödemesi kararı
 
-`@x402/svm` paketinde `exact` şemasının yanında bir **`upto`** şeması da var: istemci bir üst sınırı onaylar, sunucu gerçek kullanımı tahsil eder. Bu şema, Hafta 6–7 raporundaki **A seçeneğini (üst sınır + iade)** iade transferi olmadan, protokolün kendi içinde karşılayabilir. Ancak Solana'daki payment-channels programına ve facilitator tarafında ek imzacı desteğine dayanıyor. Bu notu danışman görüşmesine götürün; 8. aşamada `exact` + iade ile `upto` karşılaştırılabilir.
+**Karar (Hafta 6, Kapsam Dokümanı v2 §5 ve §8):** alıcı, işi gönderirken `exact` şemasıyla bir üst sınır öder; iş bitince gerçekleşen maliyet hesaplanır ve fark SPL transferiyle iade edilir. Üst sınır formülü, `N` görev, görev başına en fazla `maxReplicas` kopya ve sınama oranı `q` için:
+
+```
+üst sınır = p × N × maxReplicas / (1 − q)
+```
+
+Sınama işleri gerçek kopyaların `q / (1 − q)` katı olduğu için bölen `1 − q`'dur; sabit stratejilerde sınama işi olmadığından `üst sınır = p × N × maxReplicas`.
+
+**Alternatif:** çekirdek x402 v2 spesifikasyonu `exact` yanında `upto`, `batch-settlement` ve `auth-capture` şemalarını da adlarıyla anar ve kurallarını `specs/schemes/` altındaki ayrı belgelere bırakır. `upto`'da `amount`, doğrulama anında onaylanan üst tutardır; yani aynı sonucu iade transferi olmadan verir. Ancak SVM tarafında varsayılan yöntem emanettir (escrow) ve facilitator tarafında ek imzacı desteği gerekir. Bu yüzden `upto` 10. haftada alternatif olarak denenecek, ana akış `exact` + iade olarak kalacak.
