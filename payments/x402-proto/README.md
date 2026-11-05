@@ -32,6 +32,18 @@ Sahte bir facilitator ile şunları doğrular: ödemesiz istek 402 alır; `PAYME
 | Yanlış ağ | `server.ts` içinde ağı mainnet yapın | İstemci politikası reddeder, ödeme yapılmaz |
 | Tekrarlanan ödeme | Aynı `PAYMENT-SIGNATURE` başlığını ikinci kez gönderin | Facilitator reddeder |
 
+## Yerel facilitator (herkese açık facilitator `429` verirse)
+
+Herkese açık `x402.org` facilitator'ı Devnet RPC sınırına takılınca ödeme `settlement_pending` (`Too Many Requests`) ile kesinleşmez. Aynı işi yapan yerel bir facilitator çalıştırabilirsiniz: istemcinin imzaladığı işlemi doğrular, ücretini kendi hesabından öder ve zincire gönderir.
+
+1. **Anahtar:** `npm run keys -w payments/x402-proto -- --facilitator` (`.env`'e üçüncü bir Devnet anahtarı ekler, mevcut anahtarlara dokunmaz).
+2. **SOL:** Çıkan facilitator adresine <https://faucet.solana.com> üzerinden Devnet SOL alın (işlem ücreti için).
+3. **RPC (isteğe bağlı ama önerilir):** `.env` içine `SOLANA_RPC_URL=<kendi Devnet RPC adresiniz>` yazın (Helius, QuickNode vb. ücretsiz katman). Boşsa herkese açık RPC kullanılır ve aynı sınıra takılabilirsiniz.
+4. **Yönlendirme:** `.env` içinde `FACILITATOR_URL=http://127.0.0.1:4022` yapın.
+5. **Çalıştırma:** `npm run facilitator -w payments/x402-proto`, sonra ayrı terminallerde `npm run server …` ve `npm run client …`. Facilitator terminali her `settle` sonucunu ve hata nedenini yazar.
+
+Testler (`npm test`) yerel facilitator'ın `/supported` ve hata yolunu ağsız doğrular. Gerçek Devnet ödemesi elle denenir.
+
 ## Alıcı ödemesi kararı
 
 **Karar (Hafta 6, Kapsam Dokümanı v2 §5 ve §8):** alıcı, işi gönderirken `exact` şemasıyla bir üst sınır öder; iş bitince gerçekleşen maliyet hesaplanır ve fark SPL transferiyle iade edilir. Üst sınır formülü, `N` görev, görev başına en fazla `maxReplicas` kopya ve sınama oranı `q` için:

@@ -1,6 +1,6 @@
 // İki Devnet anahtar çifti (alıcı, platform) üretir ve .env dosyasına yazar. .env asla commit edilmez.
 // Kullanım: npm run keys -w payments/x402-proto
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { webcrypto } from "node:crypto";
 import { base58 } from "@scure/base";
 
@@ -15,6 +15,21 @@ async function keypair() {
 }
 
 const envPath = new URL("../.env", import.meta.url);
+if (process.argv.includes("--facilitator")) {
+  // Yerel facilitator için üçüncü bir anahtar çifti ekler; mevcut alıcı ve platform anahtarlarına dokunmaz.
+  if (!existsSync(envPath)) {
+    console.error(".env yok; önce `npm run keys -w payments/x402-proto` çalıştırın.");
+    process.exit(1);
+  }
+  if (readFileSync(envPath, "utf8").includes("FACILITATOR_PRIVATE_KEY=")) {
+    console.error("FACILITATOR_PRIVATE_KEY zaten var.");
+    process.exit(1);
+  }
+  const f = await keypair();
+  appendFileSync(envPath, `FACILITATOR_PRIVATE_KEY=${f.secret}\nFACILITATOR_ADDRESS=${f.address}\n`);
+  console.log(`Facilitator adresi: ${f.address}\n→ .env güncellendi\nSonraki adım: bu adrese https://faucet.solana.com üzerinden Devnet SOL alın.`);
+  process.exit(0);
+}
 if (existsSync(envPath) && !process.argv.includes("--force")) {
   console.error(".env zaten var; üzerine yazmak için --force verin.");
   process.exit(1);

@@ -6,6 +6,7 @@
     "keys": "node src/keygen.ts",
     "server": "node src/main-server.ts",
     "client": "node src/client.ts",
+    "facilitator": "node src/main-facilitator.ts",
     "test": "node --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit -p ."
   },
