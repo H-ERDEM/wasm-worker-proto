@@ -1,0 +1,7 @@
+{
+  "version": 0,
+  "jobId": "uzun-gorev",
+  "tasks": [
+    { "id": "t1", "module": "sha_chain", "input": { "seed": "hello", "iterations": 100000000 }, "deps": [] }
+  ]
+}
