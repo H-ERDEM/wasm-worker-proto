@@ -113,6 +113,7 @@
   ul.feed .pay .dot { background: var(--blue); }
   ul.feed .spot .dot { background: var(--violet); }
   ul.feed .bad { color: var(--critical); }
+  ul.feed .key span:last-child { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -453,6 +454,7 @@
     }
   }
 
+  const KEY_EVENTS = new Set(["spotcheck_failed", "retroactive_cancel", "late_detection", "job_paid", "job_finished", "worker_trusted"]);
   function addEvents(rows) {
     const ul = $("feed");
     for (const e of rows) {
@@ -461,7 +463,18 @@
       if (e.event === "spotcheck_failed" && e.detail) flash[e.detail.workerId] = Date.now() + 2500;
       const r = describe(e);
       if (!r) continue;
-      const li = el("li", r[0]);
+      // Art arda aynı olay (ör. hileli tarayıcının uyuşmazlıkları) tek satırda sayılır; önemli olaylar görünür kalır.
+      const top = ul.firstElementChild;
+      if (top && top.dataset.text === r[1]) {
+        const n = Number(top.dataset.n) + 1;
+        top.dataset.n = String(n);
+        top.querySelector(".ft").textContent = time(e.t);
+        top.lastChild.textContent = `${r[1]} (×${n})`;
+        continue;
+      }
+      const li = el("li", r[0] + (KEY_EVENTS.has(e.event) ? " key" : ""));
+      li.dataset.text = r[1];
+      li.dataset.n = "1";
       li.append(el("span", "ft", time(e.t)), el("span", "dot"), el("span", "", r[1]));
       ul.prepend(li);
     }
