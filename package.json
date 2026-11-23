@@ -26,7 +26,9 @@
     "test:sim": "python3 -m pytest -q sim/tests",
     "test:quick": "npm run test:shared && npm run test:coordinator && npm run test:payments && npm run test:sim",
     "test": "npm run test:rust && npm run build && npm run test:vectors && npm run test:e2e && npm run test:quick && npm run test:volunteer",
-    "test:payments": "npm --workspace payments/x402-proto test"
+    "test:payments": "npm --workspace payments/x402-proto test",
+    "mcp": "npm --workspace coordinator run mcp --silent",
+    "mcp-agent": "npm --workspace coordinator run mcp-agent --"
   },
   "devDependencies": {
     "playwright": "^1.50.0"

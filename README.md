@@ -178,6 +178,37 @@ HOST=0.0.0.0 PAYMENTS=1 PAYOUTS=1 npm run coordinator   # PLATFORM_PRIVATE_KEY .
 
 Platform adresinde işlem ücreti ve yeni token hesabı kirası için biraz **Devnet SOL** gerekir (https://faucet.solana.com). RPC varsayılanı `https://api.devnet.solana.com` (`RPC_URL` ile değişir).
 
+### MCP sunucusu: platform dış ajanlara açık (10. hafta)
+
+`coordinator/src/mcp/server.ts`, HTTP API'nin üstünde ince bir MCP adaptörüdür; koordinatöre yeni mantık eklemez.
+
+| Araç | Ne yapar |
+|---|---|
+| `list_modules` | WASM modülleri, özetleri, örnek DAG'ler ve DAG biçimi |
+| `get_quote` | DAG + strateji için üst sınır (USDC); iş oluşturmaz |
+| `submit_workflow` | İşi gönderir; **ücretli** (x402) |
+| `get_status` | Görev sayıları, süre, defter ve worker ödemeleri |
+| `get_result` | İş bitince çıktılar ve doğrulama bilgisi; **MCP Tasks** (`taskSupport: optional`; görev isteği olmadan çağrılırsa bekler) |
+
+Ödeme x402 v2'nin MCP taşımasıyla yapılır: ödemesiz `submit_workflow` çağrısı `isError: true` ve `structuredContent` = PaymentRequired döner; istemci aynı çağrıyı `params._meta["x402/payment"]` = PaymentPayload ile tekrarlar; başarıda kesinleşme bilgisi `_meta["x402/payment-response"]`'tadır. Adaptör ödeme yükünü `PAYMENT-SIGNATURE` başlığı olarak `POST /jobs`'a iletir; DAG doğrulaması, üst sınır + iade, tekrar koruması HTTP yoluyla aynıdır.
+
+```bash
+PAYMENTS=1 npm run coordinator                        # ayrı terminalde
+npm run -s mcp                                        # stdio MCP sunucusu (COORDINATOR_URL, varsayılan :8787)
+npm run mcp-agent -- shared/examples/image-pipeline.json --verifier adaptive --max-usdc 0.1   # uçtan uca örnek ajan (Devnet)
+```
+
+Claude masaüstü uygulaması (`claude_desktop_config.json`), yollar kendi bilgisayarınıza göre:
+
+```json
+{ "mcpServers": { "gonullu-hesaplama": {
+    "command": "node",
+    "args": ["--disable-warning=ExperimentalWarning", "/Users/<kullanıcı>/wasm-worker-proto/coordinator/src/mcp/stdio.ts"],
+    "env": { "COORDINATOR_URL": "http://127.0.0.1:8787" } } } }
+```
+
+Claude masaüstü x402 ödemesini kendisi yapmaz: `get_quote`, `get_status`, `get_result` ve ödemesiz koordinatörde `submit_workflow` kullanılabilir; ödemeli akış `mcp-agent` (ve 11. haftadaki ajan) ile gösterilir.
+
 ### Gönüllü sayfası URL parametreleri
 
 | Parametre | Açıklama |
