@@ -23,6 +23,7 @@ test("parametre dosyası beklenen alanları ve kapsam dokümanındaki değerleri
   }
   assert.deepEqual(c.reputation, { tau: 0.95, alphaMin: 10, lambda: 0.99, w: 5 });
   assert.equal(c.spotCheckRate, 0.1);
+  assert.equal(c.maxReplicas, 10, "ROADMAP karar kaydı 2026-11-23");
 });
 
 test("itibar test vektörleri parametre dosyasıyla aynı parametreleri kullanır", () => {

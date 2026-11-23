@@ -248,3 +248,12 @@ def test_crn_fault_decisions_shared_across_verifiers():
     common = outs[0].keys() & outs[1].keys()
     assert len(common) > 50
     assert all(outs[0][k] == outs[1][k] for k in common)
+
+
+@pytest.mark.parametrize("verifier", ["fixed2", "adaptive"])
+def test_max_replicas_10_keeps_job_failures_rare_at_f30(verifier):
+    """maxReplicas = 10 ile f = %30, s = 1'de görev başına başarısızlık ≈ 1,4·10⁻⁴; 5 ile ≈ 3·10⁻²."""
+    c = load_config("default", {"shared": {"verifier": verifier}, "faults": {"f": 0.3, "s": 1.0}})
+    assert c["shared"]["maxReplicas"] == 10
+    failed = sum(simulate(c, seed)[0]["jobs_failed"] for seed in (1, 2, 3))
+    assert failed <= 2  # 60 işte; 5 ile yaklaşık 40 iş başarısız oluyordu

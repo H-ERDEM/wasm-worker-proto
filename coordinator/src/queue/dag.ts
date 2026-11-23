@@ -81,12 +81,15 @@ export function validateDag(dag: unknown): { dag: Dag; order: string[] } {
   return { dag: d, order };
 }
 
-/** Görev maliyeti (işlem sayısı): sha_chain → iterations, matmul → n³. */
+/** Görev maliyeti (işlem sayısı): sha_chain → iterations, matmul → n³, image_blur → w·h·passes. */
 export function taskCost(t: DagTask): number {
   if (typeof t.cost === "number") return t.cost;
   const inp = t.input as Record<string, unknown>;
   if (t.module === "sha_chain" && typeof inp.iterations === "number") return inp.iterations;
   if (t.module === "matmul" && typeof inp.n === "number") return inp.n ** 3;
+  if (t.module === "image_blur" && [inp.w, inp.h, inp.passes].every((v) => typeof v === "number")) {
+    return (inp.w as number) * (inp.h as number) * (inp.passes as number);
+  }
   return 1;
 }
 

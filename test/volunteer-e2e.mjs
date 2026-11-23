@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 import { createServer } from "../coordinator/src/server.ts";
+import { runJs } from "../js-baseline.js";
 
 const IMPL = process.env.IMPL ?? (existsSync(new URL("../pkg/vc_tasks_bg.wasm", import.meta.url)) ? "wasm" : "js");
 console.log(`# görev uygulaması: ${IMPL}`);
@@ -112,6 +113,37 @@ test("iki tarayıcı, $ref içeren 3 görevli DAG", async () => {
     assert.equal(out.t2, createHash("sha256").update(HELLO_1, "utf8").digest("hex"));
     assert.equal(out.t3, MATMUL_42_64);
     assert.equal(new Set(t.replicas(jobId).map((r) => r.worker_id)).size, 2, "bağımsız görevler iki worker'a dağılmalı");
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("üç tarayıcı, üç modüllü iki DAG aynı anda: çatallan-birleş ve zincir", async () => {
+  const t = await setup();
+  try {
+    for (let i = 0; i < 3; i++) await t.openWorker();
+    await t.waitWorkers(3);
+    const pipeline = t.submit(example("image-pipeline.json"));
+    const chain = t.submit(example("matrix-chain.json"));
+    for (const jobId of [pipeline, chain]) {
+      const job = await t.waitJob(jobId, 60000);
+      assert.equal(job.status, "COMPLETED");
+      // Her görevin kabul edilen çıktısı, koordinatörün çözdüğü girdiden bağımsız olarak yeniden hesaplanır.
+      const rows = t.s.db.all("SELECT dag_task_id, module, input_resolved, accepted_output, ready_at, accepted_at FROM tasks WHERE job_id = ?", jobId);
+      for (const r of rows) assert.equal(r.accepted_output, runJs(r.module, r.input_resolved), `${jobId}/${r.dag_task_id}`);
+      const at = Object.fromEntries(rows.map((r) => [r.dag_task_id, r]));
+      // Alt görev ancak tüm üst görevler kabul edilince hazır olur (spekülatif yürütme yok).
+      for (const task of example(jobId === pipeline ? "image-pipeline.json" : "matrix-chain.json").tasks) {
+        for (const d of task.deps) assert.ok(at[task.id].ready_at >= at[d].accepted_at, `${task.id} ← ${d}`);
+      }
+    }
+    const used = new Set(t.replicas(pipeline).map((r) => r.worker_id));
+    assert.ok(used.size >= 2, "çatallanan görevler birden çok tarayıcıya dağılmalı");
+    if (IMPL === "wasm") {
+      const hash = t.s.coord.wasmHash;
+      assert.ok(hash, "WASM modunda koordinatör paket özetini bilmeli");
+      assert.ok(t.s.coord.getJob(pipeline).tasks.every((x) => x.moduleHash === hash));
+    }
   } finally {
     await t.teardown();
   }

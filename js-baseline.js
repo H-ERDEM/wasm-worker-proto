@@ -132,7 +132,42 @@ function matmul(inputJson) {
   return `{"hash":"${toHex(sha256(bytes))}","n":${n},"seed":${seed}}`;
 }
 
-const MODULES = { sha_chain: shaChain, matmul };
+function imageBlur(inputJson) {
+  const { seed, w, h, passes } = parseInput(inputJson, ["seed", "w", "h", "passes"]);
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    throw new Error("invalid input: seed must be a u32");
+  }
+  for (const [name, v] of [["w", w], ["h", h], ["passes", passes]]) {
+    if (v === undefined) throw new Error(`invalid input: missing field ${name}`);
+  }
+  if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || w > 1024 || h < 1 || h > 1024) {
+    throw new Error("w and h must be in 1..=1024");
+  }
+  if (!Number.isInteger(passes) || passes < 1 || passes > 16) throw new Error("passes must be in 1..=16");
+  const state = { v: seed };
+  let img = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) img[i] = mulberry32(state) >>> 24;
+  for (let p = 0; p < passes; p++) {
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = Math.min(Math.max(y + dy, 0), h - 1);
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = Math.min(Math.max(x + dx, 0), w - 1);
+            sum += img[yy * w + xx];
+          }
+        }
+        out[y * w + x] = Math.floor(sum / 9);
+      }
+    }
+    img = out;
+  }
+  return `{"h":${h},"hash":"${toHex(sha256(img))}","passes":${passes},"seed":${seed},"w":${w}}`;
+}
+
+const MODULES = { sha_chain: shaChain, matmul, image_blur: imageBlur };
 
 export function runJs(moduleName, inputJson) {
   const fn = MODULES[moduleName];

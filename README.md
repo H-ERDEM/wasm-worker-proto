@@ -97,6 +97,8 @@ npm run submit -- shared/examples/three-task-dag.json --wait
 
 Tarayıcıda `http://127.0.0.1:8787` adresini açın, **Katılıyorum, başlat** düğmesine basın ve iş gönderin. Aynı ağdaki bir telefon için koordinatörü `HOST=0.0.0.0 npm run coordinator` ile başlatıp `http://<bilgisayar-IP>:8787` adresini açın. Tarayıcı olmadan denemek için `node coordinator/test/run-fake-worker.ts` komutu Node'da bir sahte worker bağlar.
 
+**Telefonla uçtan uca deneme (23 Kasım 2026).** Android 10 / Chrome 158 telefon, aynı Wi-Fi'daki MacBook Air'de `HOST=0.0.0.0` ile çalışan koordinatöre `http://<IP>:8787` üzerinden tek worker olarak bağlandı (WASM, `moduleHash` denetimi açık). `single-task.json` ve 7 görevli `image-pipeline.json` (iki `image_blur`, bir `matmul`, üç `sha_chain`, bir birleşme) COMPLETED oldu; yedi çıktının yedisi de bağımsız hesaplamayla eşleşti. Telefon düz HTTP sayfasında olduğundan `crypto.subtle` yoktur; worker paket özetini saf JS SHA-256 ile hesaplar.
+
 ### HTTP API
 
 | Yöntem | Yol | Açıklama |
@@ -157,7 +159,7 @@ Bkz. [`payments/x402-proto/README.md`](payments/x402-proto/README.md): Solana De
 | Alan | Tür | Açıklama |
 |---|---|---|
 | `taskId` | sayı | İstek–yanıt eşleştirme anahtarı |
-| `module` | metin | `"sha_chain"`, `"matmul"` (ve test için `"debug_panic"`) |
+| `module` | metin | `"sha_chain"`, `"matmul"`, `"image_blur"` (ve test için `"debug_panic"`) |
 | `input` | metin | Görevin JSON girdisi |
 | `impl` | metin, isteğe bağlı | `"wasm"` (varsayılan) veya `"js"` |
 
@@ -189,6 +191,13 @@ Rust tarafı `run_task(module, input_json)` olarak dışa aktarılır ve her gö
 - **Tanım:** A ve B (n×n, `u32`), `mulberry32` PRNG ile satır sırasıyla (önce A, sonra B) üretilir; `C = A·B mod 2^32`. Çıktı, C'nin satır sıralı, little-endian `u32` baytlarının SHA-256 özetidir.
 - **Çıktı:** `{"hash":"<hex>","n":<n>,"seed":<seed>}`
 
+### `image_blur` (8. hafta)
+
+- **Girdi:** `{"seed": <u32>, "w": 1..=1024, "h": 1..=1024, "passes": 1..=16}`
+- **Tanım:** w×h gri tonlu `u8` görüntü `mulberry32` ile satır sırasıyla üretilir (her piksel bir sonraki çekilişin en üst baytı). 3×3 kutu bulanıklaştırma `passes` kez uygulanır: her çıktı pikseli 3×3 komşuluğun toplamının 9'a tamsayı bölümüdür; kenarlarda koordinatlar sınıra kıstırılır (en yakın piksel). Kayan nokta yoktur.
+- **Çıktı:** `{"h":<h>,"hash":"<hex>","passes":<p>,"seed":<seed>,"w":<w>}`; özet, son görüntünün satır sıralı baytlarının SHA-256'sıdır.
+- **Maliyet:** `w·h·passes` (`shared/config` `costFunctions`).
+
 ## Belirlenimcilik ve test vektörleri
 
 Görevler yalnızca tamsayı ve bayt işlemleri kullanır. WebAssembly'de kayan nokta işlemlerinin NaN bit deseni belirsiz olabildiği için ([spesifikasyon notu](https://www.webassembly.org/docs/nondeterminism/)) kayan nokta bilinçli olarak dışarıda bırakılmıştır.
@@ -200,8 +209,9 @@ Sabit vektörler `vectors.js` içindedir; beklenen değerler Rust'tan bağımsı
 | `sha_chain` | `{"seed":"hello","iterations":1}` | `2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824` |
 | `sha_chain` | `{"seed":"hello","iterations":1000}` | `f6eec10c841b542f37ffb4ca00f82c5b6b4b11b79636d20201078b667ac37159` |
 | `matmul` | `{"seed":42,"n":64}` | `21bfb70784701c76d11da1401dec6eb95c570e074e7a831c5ac69a56514433cb` |
+| `image_blur` | `{"seed":42,"w":64,"h":48,"passes":3}` | `3894adbe0c4011c6f5b7e8e3c248b1275401d8082f8cb5be5483e3bc5b488863` |
 
-Sekiz vektörün tamamı Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir.
+İlk sekiz vektör (`sha_chain`, `matmul`) Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir (5. hafta). 8. haftada 13 vektörün tamamı (`image_blur` dahil) Chrome 157 (macOS), Firefox 160 (macOS) ve Chrome 158 (Android 10) üzerinde WASM ve saf JS ile yeniden denetlendi ve eşleşti (23 Kasım 2026). `image_blur` vektörleri ayrıca Rust (yerel derleme, `cargo test`), `scripts/ref_vectors.py` ve simülatörün NumPy referansında aynıdır.
 
 ## Testler
 
@@ -250,8 +260,8 @@ Aynı SHA-256 zinciri üzerinde (200.000 iterasyon) JS/WASM süre oranı, test e
 
 | Tarayıcı | Durum |
 |---|---|
-| Chrome 155 (macOS), Chrome 155 (Android) | Test edildi |
-| Firefox 158 (macOS) | Test edildi |
+| Chrome 155–157 (macOS), Chrome 155–158 (Android 10) | Test edildi |
+| Firefox 158–160 (macOS) | Test edildi |
 | Safari / iOS | Test edilmedi |
 
 Module worker desteği gerekir; güncel Chrome, Firefox ve Safari sürümleri destekler. Eski tarayıcılar için `wasm-pack build --target no-modules` ve klasik worker (`importScripts`) kullanılabilir, ancak bu depoda uygulanmamıştır.
@@ -272,7 +282,7 @@ Module worker desteği gerekir; güncel Chrome, Firefox ve Safari sürümleri de
 
 ```
 wasm-worker-proto/
-├── Cargo.toml, src/            # Rust görevleri: lib.rs, sha_chain.rs, matmul.rs
+├── Cargo.toml, src/            # Rust görevleri: lib.rs, sha_chain.rs, matmul.rs, image_blur.rs
 ├── index.html, main.js         # WASM prototip sayfası (vektör ve benchmark düğmeleri)
 ├── volunteer.html, volunteer.js  # gönüllü sayfası (koordinatöre bağlanır)
 ├── worker-client.js            # WorkerClient: iki sayfanın ortak worker yöneticisi

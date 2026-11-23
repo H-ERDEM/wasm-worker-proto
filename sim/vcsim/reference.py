@@ -41,6 +41,16 @@ def matmul(seed: int, n: int) -> str:
     return hashlib.sha256(c.astype("<u4").tobytes()).hexdigest()
 
 
+def image_blur(seed: int, w: int, h: int, passes: int) -> str:
+    """3×3 kutu bulanıklaştırma, kenarda en yakın piksel, tamsayı tabanı (NumPy ile)."""
+    img = (_mulberry32_stream(seed, w * h) >> np.uint64(24)).astype(np.int64).reshape(h, w)
+    for _ in range(passes):
+        p = np.pad(img, 1, mode="edge")
+        total = sum(p[dy:dy + h, dx:dx + w] for dy in range(3) for dx in range(3))
+        img = total // 9
+    return hashlib.sha256(img.astype(np.uint8).tobytes()).hexdigest()
+
+
 def expected_output(module: str, input_json: str) -> str | None:
     """Kanonik beklenen çıktı; bilinmeyen modül ya da geçersiz girdi için None."""
     try:
@@ -49,6 +59,9 @@ def expected_output(module: str, input_json: str) -> str | None:
             out = {"hash": sha_chain(inp["seed"], int(inp["iterations"])), "iterations": inp["iterations"]}
         elif module == "matmul":
             out = {"hash": matmul(int(inp["seed"]), int(inp["n"])), "n": inp["n"], "seed": inp["seed"]}
+        elif module == "image_blur":
+            out = {"hash": image_blur(int(inp["seed"]), int(inp["w"]), int(inp["h"]), int(inp["passes"])),
+                   "h": inp["h"], "passes": inp["passes"], "seed": inp["seed"], "w": inp["w"]}
         else:
             return None
     except (KeyError, TypeError, ValueError):

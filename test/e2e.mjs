@@ -27,17 +27,22 @@ async function main() {
   assert.equal(await page.textContent("#status"), "tüm vektörler eşleşti");
   console.log("vectors: OK");
 
-  // 2. Long task must not block the main thread.
+  // 2. Long task must not block the main thread. The task must run for at least 500 ms to be
+  // meaningful; fast machines (e.g. Apple M-series) finish 3M iterations sooner, so the
+  // iteration count is doubled until the compute time is long enough.
   await page.selectOption("#module", "sha_chain");
-  await page.fill("#input", '{"seed":"long","iterations":3000000}');
-  const ticksBefore = Number(await page.textContent("#ticks"));
-  await page.click("#run");
-  await page.waitForFunction(() => document.getElementById("status").textContent === "tamam", null, { timeout: 120000 });
-  const timing = await page.textContent("#timing");
-  const ticksAfter = Number(await page.textContent("#ticks"));
-  const maxGap = Number(/en uzun kare aralığı ([\d.]+) ms/.exec(timing)[1]);
-  const compute = Number(/hesaplama ([\d.]+) ms/.exec(timing)[1]);
-  console.log(`long task: compute ${compute} ms, max frame gap ${maxGap} ms, frames ${ticksAfter - ticksBefore}`);
+  let iterations = 3_000_000, compute = 0, maxGap = 0, ticksBefore = 0, ticksAfter = 0;
+  for (let attempt = 0; attempt < 5 && compute <= 500; attempt++, iterations *= 2) {
+    await page.fill("#input", `{"seed":"long","iterations":${iterations}}`);
+    ticksBefore = Number(await page.textContent("#ticks"));
+    await page.click("#run");
+    await page.waitForFunction(() => document.getElementById("status").textContent === "tamam", null, { timeout: 120000 });
+    const timing = await page.textContent("#timing");
+    ticksAfter = Number(await page.textContent("#ticks"));
+    maxGap = Number(/en uzun kare aralığı ([\d.]+) ms/.exec(timing)[1]);
+    compute = Number(/hesaplama ([\d.]+) ms/.exec(timing)[1]);
+    console.log(`long task (${iterations} iterations): compute ${compute} ms, max frame gap ${maxGap} ms, frames ${ticksAfter - ticksBefore}`);
+  }
   assert.ok(compute > 500, "task should be long enough to be meaningful");
   assert.ok(maxGap < 250, "main thread must stay responsive");
   assert.ok(ticksAfter - ticksBefore > 10, "frame counter must keep advancing");

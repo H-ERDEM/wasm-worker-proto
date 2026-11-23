@@ -5,6 +5,9 @@
  */
 import { createHash } from "node:crypto";
 import WebSocket from "ws";
+// image_blur için bağımsız ikinci bir uygulama yazılmadı: saf JS uygulaması vektörlerle zaten
+// denetleniyor (shared/test/vectors.test.mjs). sha_chain ve matmul aşağıda bağımsız kalır.
+import { runJs } from "../../js-baseline.js";
 
 export function shaChain(seed: string, iterations: number): string {
   let h = createHash("sha256").update(seed, "utf8").digest();
@@ -50,7 +53,7 @@ export interface FakeWorkerOptions {
 
 export interface FakeWorker {
   id: Promise<string>;
-  assigns: { replicaId: number; module: string; input: string }[];
+  assigns: { replicaId: number; module: string; input: string; moduleHash?: string }[];
   closed: Promise<{ code: number }>;
   close(): void;
 }
@@ -79,7 +82,7 @@ export function startFakeWorker(wsUrl: string, opts: FakeWorkerOptions = {}): Fa
     if (msg.type === "ping") return ws.send(JSON.stringify({ type: "pong", t: msg.t }));
     if (msg.type !== "assign") return;
 
-    assigns.push({ replicaId: msg.replicaId, module: msg.module, input: msg.input });
+    assigns.push({ replicaId: msg.replicaId, module: msg.module, input: msg.input, moduleHash: msg.moduleHash });
     if (behavior === "close_on_assign") return ws.close();
     if (behavior === "silent_on_assign") {
       silent = true;
@@ -93,6 +96,7 @@ export function startFakeWorker(wsUrl: string, opts: FakeWorkerOptions = {}): Fa
         const input = JSON.parse(msg.input);
         if (msg.module === "sha_chain") output = shaChain(input.seed, input.iterations);
         else if (msg.module === "matmul") output = matmul(input.seed, input.n);
+        else if (msg.module === "image_blur") output = runJs("image_blur", msg.input);
         else {
           status = "error";
           output = "RuntimeError: unreachable";

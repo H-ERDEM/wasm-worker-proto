@@ -4,12 +4,12 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 
 | Aşama | Hafta | İçerik | Konum | Durum |
 |---|---|---|---|---|
-| 0 | 5 | Rust/WASM görevleri, Web Worker, test vektörleri | kök (`src/`, `worker.js`, `index.html`…) | ✅ |
+| 0 | 5 | Rust/WASM görevleri, Web Worker, test vektörleri | kök (`src/`, `worker.js`, `index.html`…) | ✅ · 8. hafta: `image_blur` (5 vektör), 13 vektör Chrome 157, Firefox 160 ve Android Chrome 158'de eşleşti |
 | 1 | 6 | Ortak sözleşmeler: DAG v0 ve mesaj v0 şemaları, parametreler, örnek iş akışları | `shared/` | ✅ |
-| 2 | 6 | x402 prototipi: Solana Devnet, `exact` şeması, istemci harcama politikası | `payments/x402-proto/` | ✅ kod ve testler · ⏳ Devnet'te elle deneme |
+| 2 | 6 | x402 prototipi: Solana Devnet, `exact` şeması, istemci harcama politikası | `payments/x402-proto/` | ✅ kod ve testler · ✅ Devnet'te gerçek ödeme (23 Kasım, 8. hafta; imza README'de) |
 | 3 | 6 | CI (GitHub Actions) | `.github/workflows/ci.yml` | ✅ |
 | 4 | 7 (B) | Koordinatör çekirdeği: HTTP API, WebSocket, DAG kuyruğu, `$ref`, fifo + accept_first, heartbeat ve zaman aşımı, SQLite, statik sayfa sunumu | `coordinator/` | ✅ |
-| 5 | 7 (B) | Gönüllü sayfası: onay, CPU sınırı, şarj koşulu, yeniden bağlanma, deney modu; gerçek Chromium testleri | `volunteer.html`, `volunteer.js`, `worker-client.js`, `test/volunteer-e2e.mjs` | ✅ |
+| 5 | 7 (B) | Gönüllü sayfası: onay, CPU sınırı, şarj koşulu, yeniden bağlanma, deney modu; gerçek Chromium testleri | `volunteer.html`, `volunteer.js`, `worker-client.js`, `test/volunteer-e2e.mjs` | ✅ · telefonla uçtan uca deneme 23 Kasım'da yapıldı (Android 10, Chrome 158) |
 | 6 | 7 (A) | SimPy simülatör iskeleti ve ortak analiz | `sim/` | ✅ |
 | 7 | 8 | Gerçek stratejiler: en hızlı öncelikli, itibar ağırlıklı; sabit 2'li, sabit 3'lü, uyarlanabilir | `coordinator/src/strategies.ts`, `sim/vcsim/strategies/` | 🔄 simülatörde tamam: itibar, 3 zamanlayıcı, 5 doğrulayıcı, sınama işi, geriye dönük iptal, iş sonunda ödeme; TS arayüzü genişletildi (uygulamalar 9. haftada) |
 | 8 | 9 | İtibar (Beta, α/β, λ, w), sınama işi kâhini (Node WASM), geriye dönük iptal, bütçe ve emanet | `coordinator/`, `sim/` | — |
@@ -29,7 +29,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | Tarih | Karar | Gerekçe |
 |---|---|---|
 | 2026-11-05 | İtibar sayaçları `alpha`/`beta` olarak adlandırıldı | Hata modelindeki `f`, `s` ile çakışmayı önlemek için (rapor §0.2) |
-| 2026-11-05 | `maxReplicas = 5`; toplam deneme sınırı 15 | Uyuşmazlığın sonsuza kadar sürmemesi; sınıra ulaşan görev FAILED ve ayrı metrik (Kapsam v2 §5) |
+| 2026-11-05 | `maxReplicas = 5`; toplam deneme sınırı 15 *(2026-11-23'te 10'a çıkarıldı)* | Uyuşmazlığın sonsuza kadar sürmemesi; sınıra ulaşan görev FAILED ve ayrı metrik (Kapsam v2 §5) |
 | 2026-11-05 | Parametre dosyası YAML yerine JSON | Node ve Python ek bağımlılık olmadan okur |
 | 2026-11-05 | SQLite için `better-sqlite3` yerine Node'un yerleşik `node:sqlite` modülü | Derlenmesi gereken yerel bağımlılık yok |
 | 2026-11-05 | TypeScript derleme adımı yok; Node'un tip ayıklaması, `tsc --noEmit` ile kontrol | Daha az araç |
@@ -54,3 +54,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 2026-11-23 | Ödeme iş bitince (COMPLETED ya da FAILED) toplu: kabul edilmiş görevlerin kabul anında eşleşen kopyaları ve geçilen sınama işleri `paid = 1`. Simülatörde uygulandı; koordinatörde 9. hafta | Kapsam §8. İptal edilebilecek sonuç önceden ödenmiş sayılamaz. FAILED işte de kabul edilmiş görevlerin emeği ödenir |
 | 2026-11-23 | Zamanlayıcılar: ölçülmemiş worker'ın hızı boştakilerin en yüksek ölçülmüş hızı sayılır (yoksa 1); eşitlikte önce ölçülmemiş, sonra sıra. İtibar ağırlıklı puan `R × hız` | Yeni worker'lar denenir ve hızları ölçülür; aksi hâlde hiç seçilmeyebilirler |
 | 2026-11-23 | BOINC adaptive: N, `match`/`spot_pass` ile artar, `mismatch`/`spot_fail` ile sıfırlanır; 1/N kararı CRN (tohum, worker, görev) ile | Kapsam §5; ortak rastgele sayılarla eşleştirilmiş karşılaştırma |
+| 2026-11-23 | `maxReplicas = 10`; toplam deneme sınırı 30. "Bir görev FAILED → iş FAILED" kuralı korunur | 5 ile 50 görevli bir işin başarısız olma olasılığı f = %20'de %29, f = %30'da %79 (simülasyon: %30 ve %68); RQ1 maliyet ve makespan karşılaştırması stratejileri değil bu tavanı ölçerdi. 10 ile f = %30'da ≈ %0,7, f = %40'ta ≈ %8. Bedeli: alıcının peşin ödediği üst sınır iki katı (fark iade edilir) |
+| 2026-11-23 | WASM hatası (`fatal`) itibarı etkilemez; `replicas_error` olarak ayrıca raporlanır | Görevler belirlenimci: girdiden kaynaklanan panic her worker'da olur; tarayıcı kaynaklı hata (ör. telefonda bellek) dürüst worker'ı w = 5 ile cezalandırırdı. Hata döndüren worker ödeme ve itibar kazanmaz, sınamayı ayırt edemez. Gelecek çalışma: başkaları başarıyla çalıştırmışken hata verene hafif ceza |
+| 2026-11-23 | `image_blur`: mulberry32 ile u8 görüntü, 3×3 kutu bulanıklaştırma, kenarda kıstırma, toplam/9 tamsayı bölme, `passes` kez; maliyet `w·h·passes`. Simülatör iş yükü karışımı değişmedi (yalnızca `base_rate` yer tutucusu eklendi) | Kayan nokta yok (Kapsam §4). Hafta 8 grafikleri aynı iş yüküyle yeniden üretilebilir kalır. Vektörler Rust (yerel), JS, saf Python ve NumPy referansında aynı; Rust testi `vectors.js`'teki tüm vektörleri yerel derlemeyle denetler (wasm32 hedefi olmayan ortamlarda da) |
+| 2026-11-23 | `moduleHash` = tek WASM paketinin (`pkg/vc_tasks_bg.wasm`) özeti. Koordinatör özeti başlangıçta hesaplar; her görev gönderimde bu özete bağlanır: DAG'de verilmişse eşleşmeli (yoksa 400), verilmemişse koordinatör doldurur. `assign` mesajı özeti taşır; worker WASM'ı çalıştırmadan önce denetler (saf JS SHA-256: düz HTTP'deki LAN sayfasında `crypto.subtle` yok). `welcome` ve `GET /modules` modül listesini verir. Paket derlenmemişse özet `null` | Modüller ayrı .wasm dosyaları değil, tek paketteki fonksiyonlar. "Zorunlu" her görevin bir özete bağlı olması olarak uygulandı; istemcinin (11. hafta ajanı) özet hesaplaması gerekmez, isterse `GET /modules`'tan alır |
