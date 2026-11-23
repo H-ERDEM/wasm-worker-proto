@@ -39,6 +39,7 @@ def compute_metrics(frames: dict[str, pd.DataFrame], unit_price: float) -> dict:
         "task_error_rate": r(len(wrong) / len(known)) if len(known) else None,
         "job_error_rate": r(len(wrong_jobs & set(completed["id"])) / len(completed)) if len(completed) else None,
         "tasks_with_truth": int(len(known)),
+        "tasks_wrong": int(len(wrong)),
         "replicas_per_task": r(len(reps) / len(tasks)) if len(tasks) else None,
         "replicas_lost": int(state_counts.get("LOST", 0)),
         "replicas_timed_out": int(state_counts.get("TIMED_OUT", 0)),
