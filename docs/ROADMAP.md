@@ -12,7 +12,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 5 | 7 (B) | Gönüllü sayfası: onay, CPU sınırı, şarj koşulu, yeniden bağlanma, deney modu; gerçek Chromium testleri | `volunteer.html`, `volunteer.js`, `worker-client.js`, `test/volunteer-e2e.mjs` | ✅ · telefonla uçtan uca deneme 23 Kasım'da yapıldı (Android 10, Chrome 158) |
 | 6 | 7 (A) | SimPy simülatör iskeleti ve ortak analiz | `sim/` | ✅ |
 | 7 | 8–9 | Gerçek stratejiler: en hızlı öncelikli, itibar ağırlıklı; sabit 2'li, sabit 3'lü, uyarlanabilir | `coordinator/src/strategies.ts`, `sim/vcsim/strategies/` | ✅ simülatörde (8. hafta) ve koordinatörde (9. hafta); ortak senaryolar `shared/test/strategy-scenarios.json` |
-| 8 | 9 | İtibar (Beta, α/β, λ, w), sınama işi kâhini (Node WASM), geriye dönük iptal, bütçe ve emanet | `coordinator/`, `sim/` | ✅ itibar, sınama işi kâhini, geriye dönük iptal, iş sonunda ödeme; x402 ile iş satın alma ve emanet defteri; Devnet'te `job_336a3fe8` (imza `payments/x402-proto/README.md`) · ⏳ tekrar denemesi |
+| 8 | 9 | İtibar (Beta, α/β, λ, w), sınama işi kâhini (Node WASM), geriye dönük iptal, bütçe ve emanet | `coordinator/`, `sim/` | ✅ itibar, sınama işi kâhini, geriye dönük iptal, iş sonunda ödeme; x402 ile iş satın alma ve emanet defteri; Devnet'te `job_336a3fe8` ve tekrarlanan ödeme başlığının reddi (imzalar `payments/x402-proto/README.md`) |
 | 9 | 10 | x402'nin `POST /jobs` önüne bağlanması, worker ödemeleri (SPL), MCP adaptörü | `coordinator/`, `payments/` | — |
 | 10 | 11 | Yapay zekâ ajanı, Playwright deney koşucuları | `agent/`, `experiments/` | — |
 | 11 | 12–13 | Deney matrisi, analiz, rapor | `experiments/`, `docs/` | — |

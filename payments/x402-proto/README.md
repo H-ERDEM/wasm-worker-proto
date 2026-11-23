@@ -73,7 +73,15 @@ Yanlış ağ ve tutar üst sınırı istemci politikasının ağsız testleriyle
 
 Gözlem: iş sırasında Mac uykuya geçince iki tarayıcı da koptu; çalışan görevler kuyruğa döndü ve tarayıcılar yeniden bağlanınca iş tamamlandı (gönüllü ayrılması senaryosu).
 
-Tekrar denemesi: `--replay` aynı imzalı ödeme başlığıyla aynı isteği ikinci kez gönderir; beklenen sonuç 402 ve ikinci işin oluşmaması.
+Tekrar denemesi (`submit -- shared/examples/single-task.json --verifier adaptive --pay --max-usdc 0.1 --replay --wait`): `--replay` aynı imzalı ödeme başlığıyla aynı isteği ikinci kez gönderir.
+
+| Alan | Değer |
+|---|---|
+| İlk istek | `job_f8600908`, 1 görev, üst sınır 0,011112 USDC (11112), imza `62BcueiSrvZfQ3KvK3b1fGKmHk9hszSXcPUz9EZgNYYRDA7YaLTmdMFtdhB17cMhbchVdyemhnmWhQzWmSshYqik` |
+| Aynı başlıkla ikinci istek | **402** `invalid_exact_svm_transaction_simulation_failed`; ikinci iş oluşmadı |
+| Defter | gerçekleşen 2000 (2 kopya), iade edilecek 9112 |
+
+Ret nedeni "zaten işlendi" değil "simülasyon başarısız": işlem zincirde zaten yer aldığı için facilitator'ın yeniden simülasyonu başarısız oluyor. Sonuç aynı (para ikinci kez çekilmez, iş oluşmaz); ret kodu facilitator'a bağlı.
 
 ## Alıcı ödemesi kararı
 
