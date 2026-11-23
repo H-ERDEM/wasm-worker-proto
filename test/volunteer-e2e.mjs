@@ -286,9 +286,13 @@ test("fixed2: iki colluder tarayıcı aynı yanlış sonucu verince kabul edilir
 });
 
 test("adaptive: sınama işi gerçek görevden ayırt edilemez; hileli tarayıcı yakalanır, dürüstler geçer", async () => {
-  // İlk üç rastgele çağrı 0 → ilk üç atama sınama işi (her tarayıcıya bir tane); sonra sınama yok.
-  let calls = 0;
-  const t = await setup({}, { random: () => (calls++ < 3 ? 0 : 0.99) });
+  // Üç tarayıcının her biri en az bir sınama işi alana kadar her atama sınama işi; sonra sınama yok.
+  // (Sabit "ilk üç çağrı" sayımı yarışa açıktı: bir tarayıcı geç hazır olursa hızlı bir dürüst
+  // tarayıcı ikinci sınama işini alıyor, hileli tarayıcı hiç sınanmıyordu — CI'da görüldü.)
+  let db = null;
+  const spotted = () => Number(db?.all("SELECT COUNT(DISTINCT worker_id) AS n FROM replicas WHERE is_spotcheck = 1")[0]?.n ?? 0);
+  const t = await setup({}, { random: () => (spotted() < 3 ? 0 : 0.99) });
+  db = t.s.db;
   try {
     await t.openWorker();
     await t.openWorker();
@@ -300,7 +304,8 @@ test("adaptive: sınama işi gerçek görevden ayırt edilemez; hileli tarayıc�
     assert.ok(correct(t, jobId));
     const kinds = t.s.db.all("SELECT kind, COUNT(*) AS n FROM rep_events WHERE kind LIKE 'spot%' GROUP BY kind");
     const n = Object.fromEntries(kinds.map((k) => [k.kind, k.n]));
-    assert.deepEqual(n, { spot_fail: 1, spot_pass: 2 });
+    assert.ok(n.spot_fail >= 1, "hileli tarayıcı sınama işinde yakalanır");
+    assert.ok(n.spot_pass >= 2, "iki dürüst tarayıcı sınamayı geçer");
     const flagged = t.s.coord.listWorkers().filter((w) => w.flagged);
     assert.equal(flagged.length, 1);
     assert.equal(flagged[0].trusted, false);
