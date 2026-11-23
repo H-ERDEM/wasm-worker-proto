@@ -4,12 +4,14 @@ import { WorkerClient } from "./worker-client.js";
 const DEFAULT_INPUTS = {
   sha_chain: '{"seed":"hello","iterations":1000}',
   matmul: '{"seed":42,"n":64}',
+  image_blur: '{"seed":42,"w":64,"h":48,"passes":3}',
   debug_panic: "{}",
 };
 
 const BENCH_CASES = [
   { module: "sha_chain", input: '{"seed":"bench","iterations":200000}' },
   { module: "matmul", input: '{"seed":1,"n":384}' },
+  { module: "image_blur", input: '{"seed":1,"w":512,"h":512,"passes":4}' },
 ];
 const BENCH_REPEATS = 5;
 const $ = (id) => document.getElementById(id);
