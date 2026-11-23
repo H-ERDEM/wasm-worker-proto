@@ -1,5 +1,6 @@
 import { DEFAULT_FACILITATOR_URL } from "../../payments/x402-proto/src/config.ts";
 import { createServer } from "./server.ts";
+import { devnetPayingFetch } from "./api/demo-buyer.ts";
 
 // Kullanım: npm run coordinator   (PORT, HOST, DB_PATH ortam değişkenleriyle)
 // Telefon gibi aynı ağdaki cihazlar için HOST=0.0.0.0 verin.
@@ -21,6 +22,10 @@ const server = await createServer({
   payments: paymentsOn
     ? { payTo: process.env.PLATFORM_ADDRESS!, facilitatorUrl: process.env.FACILITATOR_URL ?? DEFAULT_FACILITATOR_URL }
     : undefined,
+  // Demo paneli alıcısı: anahtar .env'de varsa; anahtarın kendisi loglanmaz, panele gönderilmez.
+  demoBuyer: paymentsOn && process.env.BUYER_PRIVATE_KEY
+    ? { payingFetch: devnetPayingFetch, address: process.env.BUYER_ADDRESS ?? null }
+    : undefined,
 });
 console.log(`Koordinatör çalışıyor: ${server.url}  (worker WebSocket: ${server.wsUrl})`);
 console.log(`Varsayılan zamanlayıcı: ${server.coord.scheduler.name}, doğrulayıcı: ${server.coord.verifier.name} (iş başına ?scheduler=&verifier= ile değişir)`);
@@ -28,6 +33,7 @@ console.log(`Sınama işi kâhini: ${server.coord.oracle.impl}; WASM paketi: ${s
 console.log(server.payments
   ? `Ödeme: x402 açık (Devnet USDC, alıcı ${server.payments.payTo}); POST /jobs ödemesiz 402 döner`
   : "Ödeme: kapalı (PAYMENTS=1 ile açılır)");
+console.log(`Demo paneli: ${server.url}/panel` + (server.demo.buyer ? " (alıcı hazır; yalnızca bu makineden ödeme yapar)" : ""));
 
 const shutdown = async () => {
   await server.close();

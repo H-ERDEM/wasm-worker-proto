@@ -1,0 +1,506 @@
+{
+ "version": 0,
+ "jobId": "ara-demo-40",
+ "tasks": [
+  {
+   "id": "img1",
+   "module": "image_blur",
+   "input": {
+    "seed": 100,
+    "w": 512,
+    "h": 384,
+    "passes": 4
+   },
+   "deps": []
+  },
+  {
+   "id": "img2",
+   "module": "image_blur",
+   "input": {
+    "seed": 101,
+    "w": 512,
+    "h": 384,
+    "passes": 4
+   },
+   "deps": []
+  },
+  {
+   "id": "img3",
+   "module": "image_blur",
+   "input": {
+    "seed": 102,
+    "w": 512,
+    "h": 384,
+    "passes": 4
+   },
+   "deps": []
+  },
+  {
+   "id": "img4",
+   "module": "image_blur",
+   "input": {
+    "seed": 103,
+    "w": 512,
+    "h": 384,
+    "passes": 4
+   },
+   "deps": []
+  },
+  {
+   "id": "mm1",
+   "module": "matmul",
+   "input": {
+    "seed": 200,
+    "n": 160
+   },
+   "deps": []
+  },
+  {
+   "id": "mm2",
+   "module": "matmul",
+   "input": {
+    "seed": 201,
+    "n": 160
+   },
+   "deps": []
+  },
+  {
+   "id": "mm3",
+   "module": "matmul",
+   "input": {
+    "seed": 202,
+    "n": 160
+   },
+   "deps": []
+  },
+  {
+   "id": "mm4",
+   "module": "matmul",
+   "input": {
+    "seed": 203,
+    "n": 160
+   },
+   "deps": []
+  },
+  {
+   "id": "h1a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "img1.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "img1"
+   ]
+  },
+  {
+   "id": "h2a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "img2.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "img2"
+   ]
+  },
+  {
+   "id": "h3a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "img3.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "img3"
+   ]
+  },
+  {
+   "id": "h4a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "img4.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "img4"
+   ]
+  },
+  {
+   "id": "h5a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "mm1.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "mm1"
+   ]
+  },
+  {
+   "id": "h6a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "mm2.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "mm2"
+   ]
+  },
+  {
+   "id": "h7a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "mm3.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "mm3"
+   ]
+  },
+  {
+   "id": "h8a",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "mm4.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "mm4"
+   ]
+  },
+  {
+   "id": "h1b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h1a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h1a"
+   ]
+  },
+  {
+   "id": "h2b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h2a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h2a"
+   ]
+  },
+  {
+   "id": "h3b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h3a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h3a"
+   ]
+  },
+  {
+   "id": "h4b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h4a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h4a"
+   ]
+  },
+  {
+   "id": "h5b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h5a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h5a"
+   ]
+  },
+  {
+   "id": "h6b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h6a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h6a"
+   ]
+  },
+  {
+   "id": "h7b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h7a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h7a"
+   ]
+  },
+  {
+   "id": "h8b",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h8a.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h8a"
+   ]
+  },
+  {
+   "id": "h1c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h1b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h1b"
+   ]
+  },
+  {
+   "id": "h2c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h2b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h2b"
+   ]
+  },
+  {
+   "id": "h3c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h3b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h3b"
+   ]
+  },
+  {
+   "id": "h4c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h4b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h4b"
+   ]
+  },
+  {
+   "id": "h5c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h5b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h5b"
+   ]
+  },
+  {
+   "id": "h6c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h6b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h6b"
+   ]
+  },
+  {
+   "id": "h7c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h7b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h7b"
+   ]
+  },
+  {
+   "id": "h8c",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h8b.output.hash"
+    },
+    "iterations": 600000
+   },
+   "deps": [
+    "h8b"
+   ]
+  },
+  {
+   "id": "j1",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h1c.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "h1c",
+    "h2c"
+   ]
+  },
+  {
+   "id": "j2",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h3c.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "h3c",
+    "h4c"
+   ]
+  },
+  {
+   "id": "j3",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h5c.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "h5c",
+    "h6c"
+   ]
+  },
+  {
+   "id": "j4",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "h7c.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "h7c",
+    "h8c"
+   ]
+  },
+  {
+   "id": "son1",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "j1.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "j1"
+   ]
+  },
+  {
+   "id": "son2",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "j2.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "j2"
+   ]
+  },
+  {
+   "id": "son3",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "j3.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "j3"
+   ]
+  },
+  {
+   "id": "son4",
+   "module": "sha_chain",
+   "input": {
+    "seed": {
+     "$ref": "j4.output.hash"
+    },
+    "iterations": 300000
+   },
+   "deps": [
+    "j4"
+   ]
+  }
+ ]
+}

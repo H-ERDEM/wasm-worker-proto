@@ -32,6 +32,9 @@ interface Worker {
   speedEma: number | null;
   alpha: number;
   beta: number;
+  /** hello mesajından (demo paneli ve kayıt için). */
+  userAgent: string | null;
+  deviceClass: string;
 }
 
 interface Task {
@@ -302,6 +305,10 @@ export class Coordinator {
           state: t.state,
           output: t.acceptedOutput ? JSON.parse(t.acceptedOutput) : null,
           replicas: t.replicaIds.length,
+          deps: t.def.deps ?? [],
+          /** Kabulde eşleşen kopya sayısı; tek kopyayla kabul edildiyse 1 ve `single` dolu. */
+          agreeing: t.payIds.length,
+          single: t.acceptedSingleBy !== null,
         };
       }),
     };
@@ -311,10 +318,14 @@ export class Coordinator {
   listWorkers() {
     return [...this.workers.values()].map((w) => {
       const spotFails = Number(this.db.all("SELECT COUNT(*) AS n FROM rep_events WHERE worker_id = ? AND kind = 'spot_fail'", w.id)[0]?.n ?? 0);
+      const r = w.busyReplica !== null ? this.replicas.get(w.busyReplica) : undefined;
+      const t = r && !r.spot ? this.tasks.get(r.taskKey) : undefined;
       return {
         id: w.id, busy: w.busyReplica !== null, available: w.available, speedEma: w.speedEma, lastSeen: w.lastSeen,
         alpha: w.alpha, beta: w.beta, reputation: score(w.alpha, w.beta), trusted: isTrusted(w.alpha, w.beta, this.rep),
-        flagged: spotFails > 0,
+        flagged: spotFails > 0, caught: spotFails, userAgent: w.userAgent, deviceClass: w.deviceClass,
+        // Koordinatörün görüşü (demo paneli): şu an hangi işin hangi görevi, ya da sınama işi.
+        doing: r ? (r.spot ? { spot: true, jobId: r.spot.jobId } : { spot: false, jobId: t?.jobId ?? null, task: t?.def.id ?? null, module: t?.def.module ?? null }) : null,
       };
     });
   }
@@ -331,6 +342,7 @@ export class Coordinator {
       speedEma: (stored?.speed_ema as number | null) ?? null,
       alpha: (stored?.alpha as number) ?? 0,
       beta: (stored?.beta as number) ?? 0,
+      userAgent: hello.userAgent ?? null, deviceClass: hello.deviceClass ?? "unknown",
     };
     this.workers.set(id, w);
     this.db.upsertWorker({
@@ -605,10 +617,15 @@ export class Coordinator {
     const stored = w ? null : this.db.all("SELECT alpha, beta FROM workers WHERE id = ?", workerId)[0];
     let alpha = w ? w.alpha : Number(stored?.alpha ?? 0);
     let beta = w ? w.beta : Number(stored?.beta ?? 0);
+    const wasTrusted = isTrusted(alpha, beta, this.rep);
     [alpha, beta] = update(alpha, beta, kind, this.rep);
     if (w) [w.alpha, w.beta] = [alpha, beta];
     this.db.update("workers", workerId, { alpha, beta });
     this.db.insert("rep_events", { worker_id: workerId, replica_id: replicaId, kind, alpha_after: alpha, beta_after: beta, t: Date.now() });
+    // Olay kaydı (demo paneli ve izleme): uyuşmazlık ve tek kopya moduna giriş/çıkış.
+    if (kind === "mismatch") this.db.log("warn", "result_mismatch", { workerId, replicaId });
+    const trusted = isTrusted(alpha, beta, this.rep);
+    if (trusted !== wasTrusted) this.db.log("info", trusted ? "worker_trusted" : "worker_untrusted", { workerId, reputation: score(alpha, beta) });
   }
 
   // ---------- Sınama işi ve geriye dönük iptal ----------

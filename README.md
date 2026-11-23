@@ -104,6 +104,8 @@ Tarayıcıda `http://127.0.0.1:8787` adresini açın, **Katılıyorum, başlat**
 | Yöntem | Yol | Açıklama |
 |---|---|---|
 | `POST` | `/quote` | DAG v0 için fiyat teklifi (üst sınır); iş oluşturmaz, ödeme istemez |
+| `GET` | `/panel`, `/examples`, `/events`, `/demo/info` | Demo paneli ve beslediği uç noktalar (örnek DAG'ler, olay kaydı) |
+| `POST` | `/demo/buy` | Panel alıcısı: x402 ile öder ve iş gönderir; yalnızca aynı makineden |
 | `POST` | `/jobs` | DAG v0 gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`; ödeme açıksa ödemesiz istek `402`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first` (varsayılan `shared/config`) |
 | `GET` | `/jobs/:id` | İş durumu, stratejiler, görev durumları, kabul edilen çıktılar, sınama işi sayısı |
 | `GET` | `/workers` | Bağlı worker'lar: hız, α, β, itibar R, güvenilir mi, `flagged` (sınamada en az bir kez yakalanmış; yalnızca izleme, kara liste yok) |
@@ -177,6 +179,21 @@ python -m vcsim.analyze ../experiments/data/sim/default-s1 ../coordinator/coordi
 ```
 
 `vcsim.analyze`, simülatör çıktısı ile koordinatörün SQLite kaydını **aynı metrik koduyla** okur: makespan, iş başına maliyet, görev ve iş düzeyinde hatalı sonuç oranı, kayıp ve zaman aşımı sayıları. Koordinatör kaydındaki doğru sonuç Python referansıyla hesaplanır.
+
+### Demo paneli (ara demo)
+
+Terminal yerine tek ekranda canlı demo: koordinatör çalışırken **http://127.0.0.1:8787/panel** adresini açın.
+
+- **Alıcı:** örnek DAG (`shared/examples/`, ara demo için `demo-40.json`, 40 görev) ve doğrulama stratejisi seçilir; "Teklif al" üst sınırı formülüyle gösterir, "Öde ve gönder" x402 ödemesini yapar ve adımları sırayla gösterir: 402 → imza → zincirde kesinleşme (Solana gezgini bağlantısıyla).
+- **İş:** görev grafiği canlı; her görevin durumu ve kaç eşleşen kopyayla (ya da tek kopyayla) kabul edildiği. Altında kabul, tek kopya, eşleşen kopya ve sınama sayaçları; iş bitince emanet defteri (ödenen, gerçekleşen, iade edilecek).
+- **Tarayıcılar:** bağlı her tarayıcı (Chrome · Mac, Chrome · Android …), o anki görevi ya da sınama işi, itibar çubuğu (τ çizgisiyle), "tek kopya" ve "yakalandı" rozetleri.
+- **Olaylar:** koordinatörün kaydından (`GET /events`): bağlanma, ödeme, sınama, uyuşmazlık, tek kopya moduna geçiş, geriye dönük iptal, iş sonu.
+
+Ödeme `PAYMENTS=1` ile açılır. Alıcı anahtarı (`BUYER_PRIVATE_KEY`) yalnızca koordinatörün çalıştığı makinedeki `.env`'de kalır; panel ödemeyi `POST /demo/buy` üzerinden ister ve bu uç nokta yalnızca aynı makineden gelen isteği kabul eder (`coordinator/src/api/demo-buyer.ts`). Telefonun bağlanabilmesi için `HOST=0.0.0.0` verilirse panelin üstünde gönüllü sayfasının yerel ağ adresi görünür.
+
+```bash
+HOST=0.0.0.0 PAYMENTS=1 npm run coordinator     # sonra tarayıcıda /panel
+```
 
 ### Görsel simülasyon (ara demo)
 

@@ -8,6 +8,7 @@ import { attachHub } from "./ws/hub.ts";
 import { bundleHash, DEFAULT_WASM_PATH } from "./modules.ts";
 import { loadOracle, type Oracle } from "./oracle.ts";
 import { JobPayments, type PaymentOptions } from "./api/payments.ts";
+import { DemoBuyer, type PayingFetchFactory } from "./api/demo-buyer.ts";
 
 export interface ServerOptions {
   port?: number;
@@ -22,6 +23,8 @@ export interface ServerOptions {
   random?: () => number;
   /** Verilirse POST /jobs x402 ödemesinin arkasına alınır (Devnet USDC, üst sınır). */
   payments?: PaymentOptions;
+  /** Demo paneli alıcısı (yalnızca ödeme açıkken): ödemeli fetch fabrikası ve alıcı adresi. */
+  demoBuyer?: { payingFetch: PayingFetchFactory; address: string | null };
 }
 
 export async function createServer(opts: ServerOptions = {}) {
@@ -36,16 +39,21 @@ export async function createServer(opts: ServerOptions = {}) {
     payments = new JobPayments(coord, opts.payments);
     await payments.initialize(); // facilitator erişilemezse burada hata verir
   }
-  const http = createHttpServer(httpHandler(coord, payments));
+  const demo: { buyer: DemoBuyer | null; listensOnAll: boolean } = { buyer: null, listensOnAll: opts.host === "0.0.0.0" };
+  const http = createHttpServer(httpHandler(coord, payments, demo));
   const wss = attachHub(http, coord);
   await new Promise<void>((resolve) => http.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve));
   coord.start();
   const { port } = http.address() as AddressInfo;
   const host = opts.host && opts.host !== "0.0.0.0" ? opts.host : "127.0.0.1";
+  if (payments && opts.demoBuyer) {
+    demo.buyer = new DemoBuyer(`http://127.0.0.1:${port}`, opts.demoBuyer.payingFetch, opts.demoBuyer.address);
+  }
   return {
     coord,
     db,
     payments,
+    demo,
     wss,
     url: `http://${host}:${port}`,
     wsUrl: `ws://${host}:${port}/ws`,
