@@ -25,8 +25,8 @@ before(async () => {
 after(() => browser?.close());
 
 /** Her test kendi koordinatörünü (bellek içi SQLite) ve kendi tarayıcı bağlamlarını kullanır. */
-async function setup(config = {}, { expectedConsole = null } = {}) {
-  const s = await createServer({ config: { heartbeatMs: 1000, missedHeartbeats: 2, taskTimeoutMs: 60000, ...config } });
+async function setup(config = {}, { expectedConsole = null, random } = {}) {
+  const s = await createServer({ config: { heartbeatMs: 1000, missedHeartbeats: 2, taskTimeoutMs: 60000, ...config }, random });
   const contexts = [];
   const logs = [];
   const openWorker = async (query = "autostart=1&cpu=high") => {
@@ -46,7 +46,7 @@ async function setup(config = {}, { expectedConsole = null } = {}) {
     }
     return s.coord.listWorkers();
   };
-  const submit = (dag) => s.coord.submitJob(dag).jobId;
+  const submit = (dag, opts) => s.coord.submitJob(dag, opts).jobId;
   const waitJob = async (jobId, timeout = 30000) => {
     const end = Date.now() + timeout;
     for (;;) {
@@ -239,3 +239,81 @@ test("debug_panic: hata raporlanır, worker toparlanır, görev max_replicas son
     await t.teardown();
   }
 });
+
+// ---------- 9. hafta (9.3): deney modu gerçek doğrulama stratejileriyle ----------
+
+const indep = (n, prefix = "t") => ({
+  version: 0,
+  tasks: Array.from({ length: n }, (_, i) => ({ id: `${prefix}${i}`, module: "sha_chain", input: { seed: `${prefix}-${i}`, iterations: 200 } })),
+});
+const correct = (t, jobId) =>
+  t.s.db.all("SELECT module, input_resolved, accepted_output FROM tasks WHERE job_id = ?", jobId)
+    .every((r) => r.accepted_output === runJs(r.module, r.input_resolved));
+
+test("fixed2: deney modundaki hileli tarayıcının sonucu reddedilir, itibarı düşer", async () => {
+  const t = await setup();
+  try {
+    await t.openWorker();
+    await t.openWorker();
+    await t.openWorker("autostart=1&cpu=high&fault=random&s=1");
+    const ws = await t.waitWorkers(3);
+    const jobId = t.submit(indep(6), { verifier: "fixed2" });
+    const job = await t.waitJob(jobId);
+    assert.equal(job.status, "COMPLETED");
+    assert.ok(correct(t, jobId), "kabul edilen tüm sonuçlar doğru olmalı");
+    const liar = t.s.coord.listWorkers().find((w) => w.beta > 0);
+    assert.ok(liar, "hileli tarayıcı mismatch almalı");
+    assert.equal(t.s.coord.listWorkers().filter((w) => w.beta > 0).length, 1, "yalnızca hileli tarayıcı");
+    assert.ok(ws.length === 3);
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("fixed2: iki colluder tarayıcı aynı yanlış sonucu verince kabul edilir (beklenen zayıflık)", async () => {
+  const t = await setup();
+  try {
+    await t.openWorker("autostart=1&cpu=high&fault=collude&s=1");
+    await t.openWorker("autostart=1&cpu=high&fault=collude&s=1");
+    await t.waitWorkers(2);
+    const jobId = t.submit(indep(2), { verifier: "fixed2" });
+    const job = await t.waitJob(jobId);
+    assert.equal(job.status, "COMPLETED");
+    assert.ok(!correct(t, jobId), "colluder'ların ortak yanlış sonucu kabul edilir");
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("adaptive: sınama işi gerçek görevden ayırt edilemez; hileli tarayıcı yakalanır, dürüstler geçer", async () => {
+  // Üç tarayıcının her biri en az bir sınama işi alana kadar her atama sınama işi; sonra sınama yok.
+  // (Sabit "ilk üç çağrı" sayımı yarışa açıktı: bir tarayıcı geç hazır olursa hızlı bir dürüst
+  // tarayıcı ikinci sınama işini alıyor, hileli tarayıcı hiç sınanmıyordu — CI'da görüldü.)
+  let db = null;
+  const spotted = () => Number(db?.all("SELECT COUNT(DISTINCT worker_id) AS n FROM replicas WHERE is_spotcheck = 1")[0]?.n ?? 0);
+  const t = await setup({}, { random: () => (spotted() < 3 ? 0 : 0.99) });
+  db = t.s.db;
+  try {
+    await t.openWorker();
+    await t.openWorker();
+    await t.openWorker("autostart=1&cpu=high&fault=random&s=1");
+    await t.waitWorkers(3);
+    const jobId = t.submit(indep(4), { verifier: "adaptive" });
+    const job = await t.waitJob(jobId);
+    assert.equal(job.status, "COMPLETED");
+    assert.ok(correct(t, jobId));
+    const kinds = t.s.db.all("SELECT kind, COUNT(*) AS n FROM rep_events WHERE kind LIKE 'spot%' GROUP BY kind");
+    const n = Object.fromEntries(kinds.map((k) => [k.kind, k.n]));
+    assert.ok(n.spot_fail >= 1, "hileli tarayıcı sınama işinde yakalanır");
+    assert.ok(n.spot_pass >= 2, "iki dürüst tarayıcı sınamayı geçer");
+    const flagged = t.s.coord.listWorkers().filter((w) => w.flagged);
+    assert.equal(flagged.length, 1);
+    assert.equal(flagged[0].trusted, false);
+    // Geçilen sınama işleri iş sonunda ödenir, başarısız olan ödenmez.
+    const spots = t.s.db.all("SELECT paid, output = expected_output AS ok FROM replicas WHERE is_spotcheck = 1");
+    assert.ok(spots.every((r) => r.paid === r.ok));
+  } finally {
+    await t.teardown();
+  }
+});
+

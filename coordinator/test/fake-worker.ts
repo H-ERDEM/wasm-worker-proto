@@ -45,14 +45,23 @@ export type Behavior =
   | "silent_on_assign" // görevi alınca tamamen susar (donmuş sekme)
   | "invalid"; // hello'dan sonra şemaya uymayan mesaj gönderir
 
+/**
+ * Hata modu (gönüllü sayfasındaki deney modunun karşılığı): `random` her seferinde benzersiz bir
+ * yanlış sonuç, `collude` aynı (modül, girdi) için grubun tamamında aynı yanlış sonuç döndürür.
+ */
+export type Fault = "none" | "random" | "collude";
+
 export interface FakeWorkerOptions {
   behavior?: Behavior;
   delayMs?: number;
   workerId?: string;
+  fault?: Fault;
 }
 
 export interface FakeWorker {
   id: Promise<string>;
+  /** Hata modunu çalışırken değiştirir (ör. önce dürüst, sonra hileli worker). */
+  setFault(f: Fault): void;
   assigns: { replicaId: number; module: string; input: string; moduleHash?: string }[];
   closed: Promise<{ code: number }>;
   close(): void;
@@ -60,6 +69,7 @@ export interface FakeWorker {
 
 export function startFakeWorker(wsUrl: string, opts: FakeWorkerOptions = {}): FakeWorker {
   const behavior = opts.behavior ?? "normal";
+  let fault: Fault = opts.fault ?? "none";
   const ws = new WebSocket(wsUrl);
   const assigns: FakeWorker["assigns"] = [];
   let silent = false;
@@ -106,6 +116,10 @@ export function startFakeWorker(wsUrl: string, opts: FakeWorkerOptions = {}): Fa
         status = "error";
         output = String(e);
       }
+      if (status === "ok" && fault !== "none") {
+        const token = fault === "random" ? `random|${Math.random()}|${performance.now()}` : `collude|${msg.module}|${msg.input}`;
+        output = `{"hash":"${createHash("sha256").update(token).digest("hex")}","wrong":true}`;
+      }
       ws.send(JSON.stringify({
         type: "result", replicaId: msg.replicaId, status, output: output!,
         durationMs: Math.max(0.01, performance.now() - started), impl: "js",
@@ -114,5 +128,5 @@ export function startFakeWorker(wsUrl: string, opts: FakeWorkerOptions = {}): Fa
     }, opts.delayMs ?? 0);
   });
 
-  return { id, assigns, closed, close: () => ws.close() };
+  return { id, assigns, closed, close: () => ws.close(), setFault: (f) => { fault = f; } };
 }
