@@ -97,6 +97,8 @@ npm run submit -- shared/examples/three-task-dag.json --wait
 
 Tarayıcıda `http://127.0.0.1:8787` adresini açın, **Katılıyorum, başlat** düğmesine basın ve iş gönderin. Aynı ağdaki bir telefon için koordinatörü `HOST=0.0.0.0 npm run coordinator` ile başlatıp `http://<bilgisayar-IP>:8787` adresini açın. Tarayıcı olmadan denemek için `node coordinator/test/run-fake-worker.ts` komutu Node'da bir sahte worker bağlar.
 
+**Telefonla uçtan uca deneme (23 Kasım 2026).** Android 10 / Chrome 158 telefon, aynı Wi-Fi'daki MacBook Air'de `HOST=0.0.0.0` ile çalışan koordinatöre `http://<IP>:8787` üzerinden tek worker olarak bağlandı (WASM, `moduleHash` denetimi açık). `single-task.json` ve 7 görevli `image-pipeline.json` (iki `image_blur`, bir `matmul`, üç `sha_chain`, bir birleşme) COMPLETED oldu; yedi çıktının yedisi de bağımsız hesaplamayla eşleşti. Telefon düz HTTP sayfasında olduğundan `crypto.subtle` yoktur; worker paket özetini saf JS SHA-256 ile hesaplar.
+
 ### HTTP API
 
 | Yöntem | Yol | Açıklama |
@@ -209,7 +211,7 @@ Sabit vektörler `vectors.js` içindedir; beklenen değerler Rust'tan bağımsı
 | `matmul` | `{"seed":42,"n":64}` | `21bfb70784701c76d11da1401dec6eb95c570e074e7a831c5ac69a56514433cb` |
 | `image_blur` | `{"seed":42,"w":64,"h":48,"passes":3}` | `3894adbe0c4011c6f5b7e8e3c248b1275401d8082f8cb5be5483e3bc5b488863` |
 
-İlk sekiz vektör (`sha_chain`, `matmul`) Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir. `image_blur`'un beş vektörü Rust (yerel derleme, `cargo test`), saf JS, `scripts/ref_vectors.py` ve simülatörün NumPy referansında aynıdır; tarayıcılarda WASM ile denetimi 8. haftanın sonunda yapılacak.
+İlk sekiz vektör (`sha_chain`, `matmul`) Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir (5. hafta). 8. haftada 13 vektörün tamamı (`image_blur` dahil) Chrome 157 (macOS), Firefox 160 (macOS) ve Chrome 158 (Android 10) üzerinde WASM ve saf JS ile yeniden denetlendi ve eşleşti (23 Kasım 2026). `image_blur` vektörleri ayrıca Rust (yerel derleme, `cargo test`), `scripts/ref_vectors.py` ve simülatörün NumPy referansında aynıdır.
 
 ## Testler
 
@@ -258,8 +260,8 @@ Aynı SHA-256 zinciri üzerinde (200.000 iterasyon) JS/WASM süre oranı, test e
 
 | Tarayıcı | Durum |
 |---|---|
-| Chrome 155 (macOS), Chrome 155 (Android) | Test edildi |
-| Firefox 158 (macOS) | Test edildi |
+| Chrome 155–157 (macOS), Chrome 155–158 (Android 10) | Test edildi |
+| Firefox 158–160 (macOS) | Test edildi |
 | Safari / iOS | Test edilmedi |
 
 Module worker desteği gerekir; güncel Chrome, Firefox ve Safari sürümleri destekler. Eski tarayıcılar için `wasm-pack build --target no-modules` ve klasik worker (`importScripts`) kullanılabilir, ancak bu depoda uygulanmamıştır.

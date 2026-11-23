@@ -4,12 +4,12 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 
 | Aşama | Hafta | İçerik | Konum | Durum |
 |---|---|---|---|---|
-| 0 | 5 | Rust/WASM görevleri, Web Worker, test vektörleri | kök (`src/`, `worker.js`, `index.html`…) | ✅ · 8. hafta: `image_blur` görevi (5 vektör); tarayıcılarda WASM denetimi ⏳ |
+| 0 | 5 | Rust/WASM görevleri, Web Worker, test vektörleri | kök (`src/`, `worker.js`, `index.html`…) | ✅ · 8. hafta: `image_blur` (5 vektör), 13 vektör Chrome 157, Firefox 160 ve Android Chrome 158'de eşleşti |
 | 1 | 6 | Ortak sözleşmeler: DAG v0 ve mesaj v0 şemaları, parametreler, örnek iş akışları | `shared/` | ✅ |
-| 2 | 6 | x402 prototipi: Solana Devnet, `exact` şeması, istemci harcama politikası | `payments/x402-proto/` | ✅ kod ve testler · ⏳ Devnet'te elle deneme |
+| 2 | 6 | x402 prototipi: Solana Devnet, `exact` şeması, istemci harcama politikası | `payments/x402-proto/` | ✅ kod ve testler · ✅ Devnet'te gerçek ödeme (23 Kasım, 8. hafta; imza README'de) |
 | 3 | 6 | CI (GitHub Actions) | `.github/workflows/ci.yml` | ✅ |
 | 4 | 7 (B) | Koordinatör çekirdeği: HTTP API, WebSocket, DAG kuyruğu, `$ref`, fifo + accept_first, heartbeat ve zaman aşımı, SQLite, statik sayfa sunumu | `coordinator/` | ✅ |
-| 5 | 7 (B) | Gönüllü sayfası: onay, CPU sınırı, şarj koşulu, yeniden bağlanma, deney modu; gerçek Chromium testleri | `volunteer.html`, `volunteer.js`, `worker-client.js`, `test/volunteer-e2e.mjs` | ✅ |
+| 5 | 7 (B) | Gönüllü sayfası: onay, CPU sınırı, şarj koşulu, yeniden bağlanma, deney modu; gerçek Chromium testleri | `volunteer.html`, `volunteer.js`, `worker-client.js`, `test/volunteer-e2e.mjs` | ✅ · telefonla uçtan uca deneme 23 Kasım'da yapıldı (Android 10, Chrome 158) |
 | 6 | 7 (A) | SimPy simülatör iskeleti ve ortak analiz | `sim/` | ✅ |
 | 7 | 8 | Gerçek stratejiler: en hızlı öncelikli, itibar ağırlıklı; sabit 2'li, sabit 3'lü, uyarlanabilir | `coordinator/src/strategies.ts`, `sim/vcsim/strategies/` | 🔄 simülatörde tamam: itibar, 3 zamanlayıcı, 5 doğrulayıcı, sınama işi, geriye dönük iptal, iş sonunda ödeme; TS arayüzü genişletildi (uygulamalar 9. haftada) |
 | 8 | 9 | İtibar (Beta, α/β, λ, w), sınama işi kâhini (Node WASM), geriye dönük iptal, bütçe ve emanet | `coordinator/`, `sim/` | — |
