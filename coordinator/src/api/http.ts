@@ -34,6 +34,7 @@ function readBody(req: IncomingMessage): Promise<string> {
  * HTTP API (henüz ödemesiz; x402 ara katmanı 8. aşamada bu yolların önüne eklenir).
  *   GET  /health
  *   POST /jobs        gövde: DAG v0  → 201 { jobId }
+ *                     isteğe bağlı ?scheduler=fifo|fastest|reputation&verifier=fixed2|fixed3|adaptive|accept_first
  *   GET  /jobs/:id
  *   GET  /workers
  *   GET  /modules     { bundleHash, modules: [{ name, hash, url }] }  (ajan ve istemciler için)
@@ -57,7 +58,8 @@ export function httpHandler(coord: Coordinator) {
           return send(res, 400, { error: e instanceof Error ? e.message : "geçersiz JSON" });
         }
         try {
-          return send(res, 201, coord.submitJob(dag));
+          const opts = { scheduler: url.searchParams.get("scheduler") ?? undefined, verifier: url.searchParams.get("verifier") ?? undefined };
+          return send(res, 201, coord.submitJob(dag, opts));
         } catch (e) {
           if (e instanceof DagError) return send(res, 400, { error: e.message });
           throw e;

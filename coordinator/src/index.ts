@@ -8,7 +8,8 @@ const server = await createServer({
   dbPath: process.env.DB_PATH ?? "coordinator.db",
 });
 console.log(`Koordinatör çalışıyor: ${server.url}  (worker WebSocket: ${server.wsUrl})`);
-console.log(`Zamanlayıcı: ${server.coord.scheduler.name}, doğrulayıcı: ${server.coord.verifier.name}`);
+console.log(`Varsayılan zamanlayıcı: ${server.coord.scheduler.name}, doğrulayıcı: ${server.coord.verifier.name} (iş başına ?scheduler=&verifier= ile değişir)`);
+console.log(`Sınama işi kâhini: ${server.coord.oracle.impl}; WASM paketi: ${server.coord.wasmHash ?? "derlenmemiş"}`);
 
 const shutdown = async () => {
   await server.close();

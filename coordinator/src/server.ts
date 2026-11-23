@@ -6,6 +6,7 @@ import { Db } from "./db/db.ts";
 import { httpHandler } from "./api/http.ts";
 import { attachHub } from "./ws/hub.ts";
 import { bundleHash, DEFAULT_WASM_PATH } from "./modules.ts";
+import { loadOracle, type Oracle } from "./oracle.ts";
 
 export interface ServerOptions {
   port?: number;
@@ -14,11 +15,19 @@ export interface ServerOptions {
   config?: Partial<Config>;
   /** WASM paketi; varsayılan pkg/vc_tasks_bg.wasm. Özeti başlangıçta bir kez hesaplanır. */
   wasmPath?: string;
+  /** Sınama işi kâhini; varsayılan: pkg/ derlenmişse Node'da WASM, değilse saf JS. */
+  oracle?: Oracle;
+  /** [0, 1) rastgele sayı üreteci (testler için). */
+  random?: () => number;
 }
 
 export async function createServer(opts: ServerOptions = {}) {
   const db = new Db(opts.dbPath ?? ":memory:");
-  const coord = new Coordinator(loadConfig(opts.config), db, { wasmHash: bundleHash(opts.wasmPath ?? DEFAULT_WASM_PATH) });
+  const coord = new Coordinator(loadConfig(opts.config), db, {
+    wasmHash: bundleHash(opts.wasmPath ?? DEFAULT_WASM_PATH),
+    oracle: opts.oracle ?? (await loadOracle()),
+    random: opts.random,
+  });
   const http = createHttpServer(httpHandler(coord));
   const wss = attachHub(http, coord);
   await new Promise<void>((resolve) => http.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve));
