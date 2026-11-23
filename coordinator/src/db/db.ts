@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS replicas (
   created_at INTEGER, assigned_at INTEGER, deadline_at INTEGER, returned_at INTEGER,
   output TEXT, duration_ms REAL, load_ms REAL, fatal INTEGER, paid INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS rep_events (
+  id INTEGER PRIMARY KEY, worker_id TEXT NOT NULL, replica_id INTEGER,
+  kind TEXT NOT NULL, alpha_after REAL, beta_after REAL, t INTEGER
+);
 CREATE TABLE IF NOT EXISTS log (
   t INTEGER, level TEXT, event TEXT, detail TEXT
 );

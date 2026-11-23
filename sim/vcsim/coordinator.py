@@ -17,7 +17,9 @@ from typing import Optional
 
 import simpy
 
+from . import reputation
 from .events import Recorder
+from .reputation import RepParams
 from .rng import Streams
 from .strategies import SCHEDULERS, VERIFIERS
 from .strategies.base import Decision, ReplicaView, TaskView, WorkerView
@@ -63,6 +65,7 @@ class SimReplica:
     state: str = "QUEUED"
     output: Optional[str] = None
     fatal: bool = False
+    is_spotcheck: bool = False  # sınama işleri 8.4'te eklenecek
 
 
 @dataclass
@@ -84,6 +87,7 @@ class SimCoordinator:
         self.rec = rec
         self.scheduler = SCHEDULERS[self.sh["scheduler"]]
         self.verifier = VERIFIERS[self.sh["verifier"]]
+        self.rep_params = RepParams.from_shared(self.sh)
         self.workers: dict[str, SimWorker] = {}
         self.tasks: dict[str, SimTask] = {}
         self.replicas: dict[int, SimReplica] = {}
@@ -301,6 +305,12 @@ class SimCoordinator:
         task.state = "ACCEPTED"
         task.accepted_output = output
         self.rec.task(task.key, state="ACCEPTED", accepted_output=output, accepted_at=now)
+        # İtibar: yalnızca kabul anında dönmüş gerçek kopyalar değerlendirilir (ödemeyle aynı küme).
+        returned = [self.replicas[i] for i in task.replica_ids
+                    if self.replicas[i].state == "RETURNED_OK" and not self.replicas[i].is_spotcheck]
+        events = reputation.replication_events(output, [(r.worker_id, r.output) for r in returned])
+        for r, (wid, kind) in zip(returned, events):  # olaylar girdiyle aynı sırada
+            self.observe(self.workers[wid], r.id, kind)
         for i in task.replica_ids:
             r = self.replicas[i]
             if r.state == "QUEUED":
@@ -341,6 +351,13 @@ class SimCoordinator:
         self.rec.job(job.id, status=state, completed_at=self.env.now)
         if all(j.state != "RUNNING" for j in self.jobs.values()) and not self.all_done.triggered:
             self.all_done.succeed()
+
+    # ---------- İtibar ----------
+
+    def observe(self, w: SimWorker, replica_id: int, kind: str) -> None:
+        """Doğrulanmış bir olayı worker'ın itibarına işler ve kaydeder."""
+        w.alpha, w.beta = reputation.update(w.alpha, w.beta, kind, self.rep_params)
+        self.rec.rep_event(w.id, replica_id, kind, w.alpha, w.beta, self.env.now)
 
     # ---------- Görünümler ----------
 

@@ -11,7 +11,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 4 | 7 (B) | Koordinatör çekirdeği: HTTP API, WebSocket, DAG kuyruğu, `$ref`, fifo + accept_first, heartbeat ve zaman aşımı, SQLite, statik sayfa sunumu | `coordinator/` | ✅ |
 | 5 | 7 (B) | Gönüllü sayfası: onay, CPU sınırı, şarj koşulu, yeniden bağlanma, deney modu; gerçek Chromium testleri | `volunteer.html`, `volunteer.js`, `worker-client.js`, `test/volunteer-e2e.mjs` | ✅ |
 | 6 | 7 (A) | SimPy simülatör iskeleti ve ortak analiz | `sim/` | ✅ |
-| 7 | 8 | Gerçek stratejiler: en hızlı öncelikli, itibar ağırlıklı; sabit 2'li, sabit 3'lü, uyarlanabilir | `coordinator/src/strategies.ts`, `sim/vcsim/strategies/` | Sırada |
+| 7 | 8 | Gerçek stratejiler: en hızlı öncelikli, itibar ağırlıklı; sabit 2'li, sabit 3'lü, uyarlanabilir | `coordinator/src/strategies.ts`, `sim/vcsim/strategies/` | 🔄 simülatörde itibar modülü hazır (`sim/vcsim/reputation.py`, `rep_events`); stratejiler sırada |
 | 8 | 9 | İtibar (Beta, α/β, λ, w), sınama işi kâhini (Node WASM), geriye dönük iptal, bütçe ve emanet | `coordinator/`, `sim/` | — |
 | 9 | 10 | x402'nin `POST /jobs` önüne bağlanması, worker ödemeleri (SPL), MCP adaptörü | `coordinator/`, `payments/` | — |
 | 10 | 11 | Yapay zekâ ajanı, Playwright deney koşucuları | `agent/`, `experiments/` | — |
@@ -42,3 +42,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 2026-11-05 | Ek karşılaştırma tabanları: BOINC adaptive ve `accept_first`, yalnızca simülatörde | BOINC kuralı kaynak koddan teyit edildi (N < 10 her zaman replike, N ≥ 10 ise 1/N olasılıkla) |
 | 2026-11-05 | Tüm kararlar proje ekibi tarafından alınır | Danışman kararları ekibe bıraktı; açık nokta listesi kaldırıldı |
 | 2026-11-05 | Simülatörde hata kararları akıştan değil (tohum, worker, görev) özetinden | Sıralamadan bağımsız ortak rastgele sayılar (CRN): aynı worker aynı görevde her stratejide aynı kararı verir |
+| 2026-11-23 | İtibar modeli saf fonksiyonlar olarak (`reputation.py`); ortak test vektörleri `shared/test/reputation-vectors.json` | Koordinatörün TypeScript karşılığı (9. hafta) aynı vektörleri geçmek zorunda; iki tarafın aynı kuralı uyguladığı test edilir |
+| 2026-11-23 | Bir sonuç, kabul edilen çıktıyı en az iki gerçek kopya verdiyse "replikasyonla doğrulanmış" sayılır; o görevin dönmüş her kopyası `match` ya da `mismatch` alır | Kapsam v2 §5: tek kopyayla sınamasız kabul itibarı değiştirmez. Kural doğrulayıcıdan bağımsız olduğu için sabit 2'li, sabit 3'lü ve uyarlanabilir stratejide aynı çalışır |
+| 2026-11-23 | İtibar yalnızca kabul anında dönmüş kopyalar için güncellenir (ödemeyle aynı küme); kabulden sonra gelen sonuçlar dikkate alınmaz | İtibar ile ödeme tutarlı kalır; geç sonuçlar zaten yok sayılıyor |
+| 2026-11-23 | `rep_events` tablosu (`id, worker_id, replica_id, kind, alpha_after, beta_after, t`) simülatörde ve koordinatör şemasında aynı sütunlarla | Kural 3; itibarın zaman içindeki seyri analizde çizilebilir, olay kaydı yeniden oynatılarak α, β doğrulanır |
