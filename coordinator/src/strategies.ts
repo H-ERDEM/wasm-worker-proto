@@ -1,6 +1,13 @@
 /**
  * Strateji arayüzleri. Simülatördeki (sim/vcsim/strategies/base.py) arayüzlerle bire bir aynı
- * anlamı taşır; 8. hafta yeni stratejiler yalnızca bu arayüzleri uygular.
+ * anlamı taşır.
+ *
+ * 8. hafta genişletmesi (docs/ROADMAP.md karar kaydı, 2026-11-23): `Verifier.onAssign` bir kopya
+ * bir worker'a atandığı anda çağrılır; kopya sayısının görevi alan worker'a bağlı olduğu
+ * stratejiler (uyarlanabilir) kararı burada verir. `extra` kadar ek kopya hemen kuyruğa girer;
+ * `aloneOk` kopyaya anlık görüntü olarak yazılır. Sınama işleri ve geriye dönük iptal
+ * koordinatörün işidir; doğrulayıcı yalnızca `usesSpotChecks` ile açar.
+ * Gerçek stratejilerin TypeScript uygulamaları 9. haftada eklenir.
  */
 
 export interface WorkerView {
@@ -9,6 +16,8 @@ export interface WorkerView {
   speedEma: number | null;
   alpha: number;
   beta: number;
+  /** Tek kopya koşulu (R ≥ τ, α ≥ α_min); koordinatör hesaplar. */
+  trusted: boolean;
 }
 
 export interface ReplicaView {
@@ -18,6 +27,8 @@ export interface ReplicaView {
   state: ReplicaState;
   output: string | null;
   fatal: boolean;
+  /** Atama anındaki onAssign kararı: bu kopyanın sonucu tek başına kabul edilebilir mi. */
+  aloneOk: boolean;
 }
 
 export type ReplicaState = "QUEUED" | "ASSIGNED" | "RETURNED_OK" | "RETURNED_ERROR" | "TIMED_OUT" | "LOST" | "CANCELLED";
@@ -34,6 +45,11 @@ export type Decision =
   | { kind: "wait" }
   | { kind: "fail"; reason: string };
 
+export interface AssignDecision {
+  extra: number;
+  aloneOk: boolean;
+}
+
 export interface Scheduler {
   readonly name: string;
   /** Kuyruğun başındaki kopya için boştaki worker'lardan birini seçer; uygun yoksa null. */
@@ -42,8 +58,12 @@ export interface Scheduler {
 
 export interface Verifier {
   readonly name: string;
+  /** Koordinatör bu strateji için cevabı bilinen sınama işi üretsin mi (oran: spotCheckRate). */
+  readonly usesSpotChecks: boolean;
   /** Görev HAZIR olduğunda kaç kopya üretileceği. */
   initialReplicas(task: TaskView): number;
+  /** Kopya `worker`'a atandıktan hemen sonra; `replicas` bu kopyayı ASSIGNED olarak içerir. `u` ∈ [0, 1). */
+  onAssign(task: TaskView, replicas: ReplicaView[], worker: WorkerView, u: number): AssignDecision;
   /** Bir kopya döndüğünde (ok ya da error) karar. Sonuçlanan kopyalar `replicas` içindedir. */
   onResult(task: TaskView, replicas: ReplicaView[]): Decision;
 }
@@ -58,7 +78,9 @@ export const fifoScheduler: Scheduler = {
 /** İlk başarılı sonucu kabul eder (güvensiz; yalnızca karşılaştırma tabanı). Hata dönerse yeni kopya ister. */
 export const acceptFirstVerifier: Verifier = {
   name: "accept_first",
+  usesSpotChecks: false,
   initialReplicas: () => 1,
+  onAssign: () => ({ extra: 0, aloneOk: true }),
   onResult: (_task, replicas) => {
     const ok = replicas.find((r) => r.state === "RETURNED_OK");
     if (ok) return { kind: "accept", output: ok.output! };

@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
-
 import pytest
 
 from vcsim import SHARED_DIR
 from vcsim.config import deep_merge, load_config
 from vcsim.reputation import RepParams, is_trusted, replication_events, score, update
 from vcsim.run import simulate
-from vcsim.strategies import VERIFIERS
-from vcsim.strategies.base import Decision
 
 VECTORS = json.loads((SHARED_DIR / "test" / "reputation-vectors.json").read_text(encoding="utf-8"))
 P = RepParams.from_shared(load_config("default")["shared"])
@@ -136,30 +132,6 @@ def test_colluders_agreeing_on_wrong_value_both_match():
 
 # ---------- Simüle koordinatörle bütünleşme ----------
 
-class _TwoAgreeVerifier:
-    """Yalnızca bu testler için: 2 kopya, iki eşleşen sonuç kabul. Gerçek fixed2 8.3'te gelecek."""
-
-    name = "_test_two_agree"
-
-    def initial_replicas(self, task):
-        return 2
-
-    def on_result(self, task, replicas):
-        counts = Counter(r.output for r in replicas if r.state == "RETURNED_OK")
-        for out, n in counts.items():
-            if n >= 2:
-                return Decision("accept", output=out)
-        if any(r.state in ("QUEUED", "ASSIGNED") for r in replicas):
-            return Decision("wait")
-        return Decision("need_more", count=1)
-
-
-@pytest.fixture
-def two_agree(monkeypatch):
-    monkeypatch.setitem(VERIFIERS, _TwoAgreeVerifier.name, _TwoAgreeVerifier())
-    return _TwoAgreeVerifier.name
-
-
 def _cfg(**over):
     small = {"workload": {"n_dags": 4, "tasks_per_dag": 30}, "workers": {"initial": 12}}
     return load_config("default", deep_merge(small, over))
@@ -171,8 +143,8 @@ def test_accept_first_produces_no_reputation_events():
     assert all(w.alpha == 0.0 and w.beta == 0.0 for w in info["workers"].values())
 
 
-def test_replication_updates_reputation_and_log_replays(two_agree):
-    _, rec, info = simulate(_cfg(shared={"verifier": two_agree}, faults={"f": 0.3, "s": 1.0}), 2)
+def test_replication_updates_reputation_and_log_replays():
+    _, rec, info = simulate(_cfg(shared={"verifier": "fixed2"}, faults={"f": 0.3, "s": 1.0}), 2)
     workers = info["workers"]
     ev = rec.frames()["rep_events"]
     assert len(ev) > 0
@@ -198,8 +170,8 @@ def test_replication_updates_reputation_and_log_replays(two_agree):
     assert (reps.loc[ev.loc[ev["kind"] == "mismatch", "replica_id"], "paid"] == 0).all()
 
 
-def test_colluders_gain_reputation_when_paired(two_agree):
-    _, rec, info = simulate(_cfg(shared={"verifier": two_agree},
+def test_colluders_gain_reputation_when_paired():
+    _, rec, info = simulate(_cfg(shared={"verifier": "fixed2"},
                                  faults={"f": 0.3, "s": 1.0, "collusion": True}), 3)
     ev = rec.frames()["rep_events"]
     faulty = {w.id for w in info["workers"].values() if w.faulty}

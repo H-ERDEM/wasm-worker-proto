@@ -59,6 +59,7 @@ def simulate(cfg: dict, seed: int) -> tuple[dict, Recorder, dict]:
         "workers_faulty": sum(w.faulty for w in coord.workers.values()),
         "sim_end_ms": round(float(env.now), 3),
         "timed_out": not coord.all_done.triggered,
+        **coord.stats,
     })
     return summary, rec, {"dags": dags, "workers": coord.workers}
 

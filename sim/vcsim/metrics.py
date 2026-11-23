@@ -15,6 +15,9 @@ def compute_metrics(frames: dict[str, pd.DataFrame], unit_price: float) -> dict:
     wrong = known[known["accepted_output"] != known["expected_output"]]
     wrong_jobs = set(wrong["job_id"])
     paid_units = int(reps["paid"].fillna(0).astype(int).sum())
+    spot = reps[reps["is_spotcheck"].fillna(0).astype(int) == 1]
+    spot_ret = spot[spot["state"] == "RETURNED_OK"]
+    spot_fail = spot_ret[spot_ret["output"] != spot_ret["expected_output"]]
 
     makespan = (finished["completed_at"].max() - jobs["submitted_at"].min()) if len(finished) else None
     per_job = (completed["completed_at"] - completed["submitted_at"]) if len(completed) else pd.Series(dtype=float)
@@ -40,4 +43,6 @@ def compute_metrics(frames: dict[str, pd.DataFrame], unit_price: float) -> dict:
         "replicas_lost": int(state_counts.get("LOST", 0)),
         "replicas_timed_out": int(state_counts.get("TIMED_OUT", 0)),
         "replicas_error": int(state_counts.get("RETURNED_ERROR", 0)),
+        "spotchecks": int(len(spot)),
+        "spotchecks_failed": int(len(spot_fail)),
     }
