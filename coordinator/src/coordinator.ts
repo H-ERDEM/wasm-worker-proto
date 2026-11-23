@@ -94,6 +94,40 @@ export interface JobOptions {
   verifier?: string;
 }
 
+/** USDC'nin ondalık basamağı: 1 USDC = 10^6 atomik birim. */
+export const USDC_DECIMALS = 6;
+
+/**
+ * İş için fiyat teklifi (Kapsam v3 §5). Alıcı işi gönderirken üst sınırı öder; iş bitince
+ * gerçekleşen maliyet hesaplanır ve fark iade edilir (zincir üstü iade 10. haftada).
+ *   uyarlanabilir:  üst sınır = p × N × maxReplicas / (1 − q)
+ *   sınama işsiz:   üst sınır = p × N × maxReplicas
+ * p birim ücret (görev türünden bağımsız; simülatörle aynı), N görev sayısı. Atomik birim, yukarı yuvarlanır.
+ */
+export interface Quote {
+  tasks: number;
+  scheduler: string;
+  verifier: string;
+  unitPriceAtomic: number;
+  maxReplicas: number;
+  spotCheckRate: number;
+  capAtomic: number;
+  /** Üst sınır, USDC (ondalık metin). */
+  cap: string;
+}
+
+/** Ödenmiş bir iş gönderiminin kaydı (x402 kesinleşmesinden). */
+export interface JobPayment {
+  capAtomic: number;
+  transaction: string;
+  payer: string | null;
+}
+
+export function formatUsdc(atomic: number): string {
+  const s = String(Math.round(atomic)).padStart(USDC_DECIMALS + 1, "0");
+  return `${s.slice(0, -USDC_DECIMALS)}.${s.slice(-USDC_DECIMALS)}`;
+}
+
 export interface CoordinatorOptions {
   wasmHash?: string | null;
   /** Sınama işlerinin beklenen çıktısı (varsayılan saf JS; sunucu WASM'ı yükler). */
@@ -176,7 +210,8 @@ export class Coordinator {
 
   // ---------- İşler ----------
 
-  submitJob(raw: unknown, opts: JobOptions = {}): { jobId: string } {
+  /** DAG'i, stratejileri ve modül özetlerini doğrular; iş oluşturmaz. Hata → DagError (HTTP 400). */
+  prepareJob(raw: unknown, opts: JobOptions = {}) {
     const { dag, order } = validateDag(raw);
     const scheduler = opts.scheduler ? Coordinator.schedulerNamed(opts.scheduler) : this.scheduler;
     const verifier = opts.verifier ? Coordinator.verifierNamed(opts.verifier) : this.verifier;
@@ -187,6 +222,27 @@ export class Coordinator {
         );
       }
     }
+    return { dag, order, scheduler, verifier };
+  }
+
+  get unitPriceAtomic(): number {
+    return Math.round(this.cfg.unitPrice * 10 ** USDC_DECIMALS);
+  }
+
+  /** Fiyat teklifi: iş oluşturmadan üst sınırı hesaplar (POST /quote ve x402 dinamik fiyatı). */
+  quote(raw: unknown, opts: JobOptions = {}): Quote {
+    const { dag, scheduler, verifier } = this.prepareJob(raw, opts);
+    const q = verifier.usesSpotChecks ? this.cfg.spotCheckRate : 0;
+    const n = dag.tasks.length;
+    const capAtomic = Math.ceil((this.unitPriceAtomic * n * this.cfg.maxReplicas) / (1 - q));
+    return {
+      tasks: n, scheduler: scheduler.name, verifier: verifier.name, unitPriceAtomic: this.unitPriceAtomic,
+      maxReplicas: this.cfg.maxReplicas, spotCheckRate: q, capAtomic, cap: formatUsdc(capAtomic),
+    };
+  }
+
+  submitJob(raw: unknown, opts: JobOptions = {}, payment?: JobPayment): { jobId: string } {
+    const { dag, order, scheduler, verifier } = this.prepareJob(raw, opts);
     const jobId = `job_${randomUUID().slice(0, 8)}`;
     const now = Date.now();
     const children = new Map<string, string[]>(dag.tasks.map((t) => [t.id, []]));
@@ -200,6 +256,7 @@ export class Coordinator {
     this.db.insert("jobs", {
       id: jobId, dag_json: JSON.stringify(dag), strategy_sched: scheduler.name,
       strategy_verif: verifier.name, status: job.state, submitted_at: now,
+      ...(payment ? { quote_cap: payment.capAtomic, payment_tx: payment.transaction, payer: payment.payer, paid_at: now } : {}),
     });
 
     const byId = new Map(dag.tasks.map((t) => [t.id, t]));
@@ -235,6 +292,7 @@ export class Coordinator {
       submittedAt: job.submittedAt,
       completedAt: job.completedAt,
       spotchecks: job.spotIds.length,
+      payment: this.ledger(job.id),
       tasks: job.taskKeys.map((k) => {
         const t = this.tasks.get(k)!;
         return {
@@ -507,7 +565,36 @@ export class Coordinator {
     }
     for (const id of job.spotIds) if (this.spotPassed(this.replicas.get(id)!)) this.db.update("replicas", id, { paid: 1 });
     this.db.update("jobs", job.id, { status: state, completed_at: job.completedAt });
+    this.closeLedger(job);
     this.db.log("info", "job_finished", { jobId: job.id, state });
+  }
+
+  // ---------- Emanet defteri ----------
+
+  /** İşte ödenen kopya sayısı (kabul edilen görevlerin eşleşen kopyaları + geçilen sınama işleri). */
+  private paidCopies(job: Job): number {
+    const real = Number(this.db.all(
+      "SELECT COUNT(*) AS n FROM replicas r JOIN tasks t ON t.id = r.task_id WHERE t.job_id = ? AND r.paid = 1", job.id)[0].n);
+    const spots = job.spotIds.filter((id) => Number(this.db.all("SELECT paid FROM replicas WHERE id = ?", id)[0]?.paid) === 1).length;
+    return real + spots;
+  }
+
+  /** İş bitince gerçekleşen maliyet ve (ödenmiş işlerde) iade edilecek tutar yazılır. */
+  private closeLedger(job: Job): void {
+    const realized = this.paidCopies(job) * this.unitPriceAtomic;
+    const cap = this.db.all("SELECT quote_cap FROM jobs WHERE id = ?", job.id)[0]?.quote_cap;
+    const refund = typeof cap === "number" ? Math.max(0, cap - realized) : null;
+    this.db.update("jobs", job.id, { realized_cost: realized, refund_due: refund });
+    if (typeof cap === "number" && realized > cap) this.db.log("error", "cost_exceeds_cap", { jobId: job.id, cap, realized });
+  }
+
+  private ledger(jobId: string) {
+    const r = this.db.all("SELECT quote_cap, payment_tx, payer, realized_cost, refund_due, refund_tx FROM jobs WHERE id = ?", jobId)[0];
+    if (!r || r.quote_cap === null) return null;
+    return {
+      capAtomic: r.quote_cap, transaction: r.payment_tx, payer: r.payer,
+      realizedAtomic: r.realized_cost, refundDueAtomic: r.refund_due, refundTransaction: r.refund_tx,
+    };
   }
 
   // ---------- İtibar ----------
@@ -571,7 +658,10 @@ export class Coordinator {
     const passed = this.spotPassed(r);
     this.observe(workerId, r.id, passed ? "spot_pass" : "spot_fail");
     const job = this.jobs.get(r.spot!.jobId);
-    if (passed && job && job.state !== "RUNNING") this.db.update("replicas", r.id, { paid: 1 }); // iş sınama dönmeden bitti
+    if (passed && job && job.state !== "RUNNING") {
+      this.db.update("replicas", r.id, { paid: 1 }); // iş sınama dönmeden bitti
+      this.closeLedger(job);
+    }
     if (!passed) {
       this.stats.spotFails++;
       this.db.log("warn", "spotcheck_failed", { replicaId: r.id, workerId });

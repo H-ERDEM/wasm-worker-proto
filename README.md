@@ -103,7 +103,8 @@ Tarayıcıda `http://127.0.0.1:8787` adresini açın, **Katılıyorum, başlat**
 
 | Yöntem | Yol | Açıklama |
 |---|---|---|
-| `POST` | `/jobs` | DAG v0 gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first` (varsayılan `shared/config`) |
+| `POST` | `/quote` | DAG v0 için fiyat teklifi (üst sınır); iş oluşturmaz, ödeme istemez |
+| `POST` | `/jobs` | DAG v0 gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`; ödeme açıksa ödemesiz istek `402`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first` (varsayılan `shared/config`) |
 | `GET` | `/jobs/:id` | İş durumu, stratejiler, görev durumları, kabul edilen çıktılar, sınama işi sayısı |
 | `GET` | `/workers` | Bağlı worker'lar: hız, α, β, itibar R, güvenilir mi, `flagged` (sınamada en az bir kez yakalanmış; yalnızca izleme, kara liste yok) |
 | `GET` | `/modules` | WASM paket özeti ve modül listesi |
@@ -136,6 +137,25 @@ Koordinatör simülatörle aynı stratejileri uygular (`coordinator/src/strategi
 - **Sınama işi:** Doğrulayıcı `adaptive` ise her atamada `spotCheckRate` olasılıkla worker'a gerçek görev yerine aynı modülden, aynı boyutta, rastgele tohumlu bir görev gider. Beklenen çıktıyı koordinatör Node'da aynı WASM ile (derlenmemişse saf JS ile) hesaplar (`oracle.ts`). Sınama işi `replicas` tablosunda `is_spotcheck = 1`, `task_id = spot/…` olarak kaydedilir; `tasks` tablosuna girmez.
 - **Geriye dönük iptal:** Sınamada yakalanan worker'ın bitmemiş işlerdeki tek kopyalı kabulleri ve onlara bağlı alt görevler yeniden kuyruğa alınır (`log` tablosunda `retroactive_cancel`).
 - **Ödeme:** İş bitince (COMPLETED ya da FAILED) kabul edilen görevlerin eşleşen kopyaları ve geçilen sınama işleri `paid = 1` olur. Zincir üstü transfer 10. haftada.
+
+### Ödemeli koordinatör: x402 ile iş satın alma (9. hafta)
+
+`PAYMENTS=1` ile `POST /jobs` bir x402 ödemesinin arkasına alınır (`coordinator/src/api/payments.ts`). Alıcı işi gönderirken **üst sınırı** öder (`exact`, Devnet USDC); iş bitince gerçekleşen maliyet hesaplanır ve fark `jobs.refund_due`'ya yazılır (zincir üstü iade 10. haftada).
+
+- Üst sınır = p × N × maxReplicas / (1 − q) (uyarlanabilir), p × N × maxReplicas (sınama işsiz stratejiler); p = `unitPrice` (0,001 USDC), N görev sayısı, maxReplicas = 10, q = 0,10. Örnek: 7 görevli `image-pipeline.json`, `adaptive` → 0,077778 USDC.
+- DAG ve stratejiler ödemeden **önce** doğrulanır (geçersiz istek 400, ödeme istenmez). Ödeme zincirde **kesinleştikten sonra** iş kuyruğa girer; kesinleşmezse iş oluşturulmaz.
+- Ödeme imzası tutara bağlıdır: küçük bir iş için imzalanan ödemeyle büyük bir iş gönderilemez. Aynı ödemenin tekrarı reddedilir.
+- Emanet defteri `jobs` tablosunda: `quote_cap`, `payment_tx`, `payer`, `paid_at`, `realized_cost`, `refund_due` (atomik USDC; `GET /jobs/:id` → `payment`).
+
+Devnet'te çalıştırma (anahtarlar `payments/x402-proto/.env`; bkz. o klasörün README'si):
+
+```bash
+PAYMENTS=1 npm run coordinator                       # PLATFORM_ADDRESS .env'den okunur
+npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --quote      # yalnızca teklif
+npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay --max-usdc 0.1 --wait
+```
+
+`--pay` alıcı anahtarını (`BUYER_PRIVATE_KEY`) kullanır; istemci politikası yalnızca Devnet, yalnızca Devnet USDC ve en fazla `--max-usdc` (varsayılan 1) öder.
 
 ### Gönüllü sayfası URL parametreleri
 

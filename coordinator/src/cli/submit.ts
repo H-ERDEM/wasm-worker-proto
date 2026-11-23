@@ -3,39 +3,95 @@ import { resolve } from "node:path";
 
 // Kullanım: npm run submit -- shared/examples/three-task-dag.json [--url http://127.0.0.1:8787] [--wait]
 //           [--scheduler fifo|fastest|reputation] [--verifier fixed2|fixed3|adaptive|accept_first]
+//           [--quote]                  yalnızca fiyat teklifi (iş oluşturmaz)
+//           [--pay [--max-usdc 1]]     x402 ile öde (alıcı anahtarı payments/x402-proto/.env: BUYER_PRIVATE_KEY);
+//                                      üst sınır --max-usdc'yi (varsayılan 1 USDC) aşarsa ödeme yapılmaz
 const args = process.argv.slice(2);
 const flag = (name: string) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const valued = new Set(["--url", "--scheduler", "--verifier"].map((f) => args.indexOf(f) + 1).filter((i) => i > 0));
+const valued = new Set(["--url", "--scheduler", "--verifier", "--max-usdc"].map((f) => args.indexOf(f) + 1).filter((i) => i > 0));
 const file = args.find((a, i) => !a.startsWith("--") && !valued.has(i));
 const base = flag("--url") ?? process.env.COORDINATOR_URL ?? "http://127.0.0.1:8787";
 const query = new URLSearchParams(
   Object.entries({ scheduler: flag("--scheduler"), verifier: flag("--verifier") }).filter(([, v]) => v) as [string, string][],
 ).toString();
+const qs = query ? `?${query}` : "";
 if (!file) {
-  console.error("Kullanım: npm run submit -- <dag.json> [--url <adres>] [--wait]");
+  console.error("Kullanım: npm run submit -- <dag.json> [--url <adres>] [--wait] [--quote] [--pay [--max-usdc 1]]");
   process.exit(2);
 }
 
 // npm workspace komutları alt klasörde çalışır; yolu komutun verildiği klasöre göre çöz.
-const path = resolve(process.env.INIT_CWD ?? process.cwd(), file);
-const res = await fetch(`${base}/jobs${query ? `?${query}` : ""}`, {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: readFileSync(path, "utf8"),
-});
-const body = (await res.json()) as { jobId?: string; error?: string };
-if (!res.ok) {
-  console.error(`Hata (${res.status}): ${body.error}`);
+const body = readFileSync(resolve(process.env.INIT_CWD ?? process.cwd(), file), "utf8");
+const post = (path: string, f: typeof fetch = fetch) =>
+  f(`${base}${path}${qs}`, { method: "POST", headers: { "content-type": "application/json" }, body });
+
+interface QuoteResp { quote: { tasks: number; verifier: string; cap: string; capAtomic: number }; payment: { payTo: string; network: string } | null; error?: string }
+const qres = await post("/quote");
+const q = (await qres.json()) as QuoteResp;
+if (!qres.ok) {
+  console.error(`Hata (${qres.status}): ${q.error}`);
   process.exit(1);
 }
-console.log(`İş gönderildi: ${body.jobId}`);
+console.log(`Teklif: ${q.quote.tasks} görev, doğrulayıcı ${q.quote.verifier}, üst sınır ${q.quote.cap} USDC` +
+  (q.payment ? ` (ödeme ${q.payment.network}, alıcı ${q.payment.payTo})` : " (koordinatörde ödeme kapalı)"));
+if (args.includes("--quote")) process.exit(0);
+
+let doFetch: typeof fetch = fetch;
+if (args.includes("--pay") && !q.payment) {
+  console.log("Koordinatörde ödeme kapalı; --pay yok sayıldı.");
+} else if (args.includes("--pay")) {
+  const maxUsdc = Number(flag("--max-usdc") ?? 1);
+  const maxAtomic = BigInt(Math.round(maxUsdc * 1e6));
+  if (BigInt(q.quote.capAtomic) > maxAtomic) {
+    console.error(`Üst sınır (${q.quote.cap} USDC) bütçeyi (${maxUsdc} USDC) aşıyor; ödeme yapılmadı. --max-usdc ile artırın.`);
+    process.exit(1);
+  }
+  try {
+    process.loadEnvFile(new URL("../../../payments/x402-proto/.env", import.meta.url).pathname);
+  } catch {
+    /* .env yoksa ortam değişkenleri doğrudan kullanılır */
+  }
+  const { base58 } = await import("@scure/base");
+  const { createKeyPairSignerFromBytes } = await import("@solana/kit");
+  const { wrapFetchWithPayment, x402Client } = await import("@x402/fetch");
+  const { ExactSvmScheme } = await import("@x402/svm/exact/client");
+  const { devnetPolicyWithMax, requireEnv } = await import("../../../payments/x402-proto/src/config.ts");
+  let key: string;
+  try {
+    key = requireEnv("BUYER_PRIVATE_KEY");
+  } catch (e) {
+    console.error(`${(e as Error).message}. Anahtar üretmek için: npm run keys -w payments/x402-proto`);
+    process.exit(1);
+  }
+  const signer = await createKeyPairSignerFromBytes(base58.decode(key));
+  // Güvenlik politikası: yalnızca Devnet, yalnızca Devnet USDC, en fazla --max-usdc.
+  const client = new x402Client().register("solana:*", new ExactSvmScheme(signer)).registerPolicy(devnetPolicyWithMax(maxAtomic));
+  doFetch = wrapFetchWithPayment(fetch, client);
+  console.log(`Alıcı: ${signer.address}; bütçe ${maxUsdc} USDC`);
+}
+
+const res = await post("/jobs", doFetch);
+const out = (await res.json()) as { jobId?: string; error?: string; payment?: { transaction: string; payer: string } };
+if (res.status === 402) {
+  console.error(`Ödeme gerekli (402): üst sınır ${q.quote.cap} USDC. --pay ile ödeyin.` + (out.error ? ` Neden: ${out.error}` : ""));
+  process.exit(1);
+}
+if (!res.ok) {
+  console.error(`Hata (${res.status}): ${out.error ?? JSON.stringify(out)}`);
+  process.exit(1);
+}
+console.log(`İş gönderildi: ${out.jobId}`);
+if (out.payment) {
+  console.log(`Ödeme kesinleşti: ${out.payment.transaction} (ödeyen ${out.payment.payer})`);
+  console.log(`  Gezgin: https://explorer.solana.com/tx/${out.payment.transaction}?cluster=devnet`);
+}
 
 if (args.includes("--wait")) {
   for (;;) {
-    const job = (await (await fetch(`${base}/jobs/${body.jobId}`)).json()) as { status: string };
+    const job = (await (await fetch(`${base}/jobs/${out.jobId}`)).json()) as { status: string };
     if (job.status !== "RUNNING") {
       console.log(JSON.stringify(job, null, 2));
       process.exit(job.status === "COMPLETED" ? 0 : 1);

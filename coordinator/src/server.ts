@@ -7,6 +7,7 @@ import { httpHandler } from "./api/http.ts";
 import { attachHub } from "./ws/hub.ts";
 import { bundleHash, DEFAULT_WASM_PATH } from "./modules.ts";
 import { loadOracle, type Oracle } from "./oracle.ts";
+import { JobPayments, type PaymentOptions } from "./api/payments.ts";
 
 export interface ServerOptions {
   port?: number;
@@ -19,6 +20,8 @@ export interface ServerOptions {
   oracle?: Oracle;
   /** [0, 1) rastgele sayı üreteci (testler için). */
   random?: () => number;
+  /** Verilirse POST /jobs x402 ödemesinin arkasına alınır (Devnet USDC, üst sınır). */
+  payments?: PaymentOptions;
 }
 
 export async function createServer(opts: ServerOptions = {}) {
@@ -28,7 +31,12 @@ export async function createServer(opts: ServerOptions = {}) {
     oracle: opts.oracle ?? (await loadOracle()),
     random: opts.random,
   });
-  const http = createHttpServer(httpHandler(coord));
+  let payments: JobPayments | null = null;
+  if (opts.payments) {
+    payments = new JobPayments(coord, opts.payments);
+    await payments.initialize(); // facilitator erişilemezse burada hata verir
+  }
+  const http = createHttpServer(httpHandler(coord, payments));
   const wss = attachHub(http, coord);
   await new Promise<void>((resolve) => http.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve));
   coord.start();
@@ -37,6 +45,7 @@ export async function createServer(opts: ServerOptions = {}) {
   return {
     coord,
     db,
+    payments,
     wss,
     url: `http://${host}:${port}`,
     wsUrl: `ws://${host}:${port}/ws`,

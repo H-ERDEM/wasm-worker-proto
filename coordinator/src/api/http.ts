@@ -1,15 +1,18 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Coordinator } from "../coordinator.ts";
 import { DagError } from "../queue/dag.ts";
+import { jobOptionsFrom, type JobPayments } from "./payments.ts";
 import { serveStatic } from "./static.ts";
 
 const MAX_BODY = 1024 * 1024;
 
-function send(res: ServerResponse, status: number, body: unknown): void {
+function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "content-type, payment-signature, x-payment",
+    "access-control-expose-headers": "payment-required, payment-response",
+    ...headers,
   });
   res.end(JSON.stringify(body));
 }
@@ -31,16 +34,18 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /**
- * HTTP API (henüz ödemesiz; x402 ara katmanı 8. aşamada bu yolların önüne eklenir).
+ * HTTP API.
  *   GET  /health
- *   POST /jobs        gövde: DAG v0  → 201 { jobId }
+ *   POST /quote       gövde: DAG v0  → 200 { quote, payment? }  (iş oluşturmaz, ödeme istemez)
+ *   POST /jobs        gövde: DAG v0  → 201 { jobId, ... }
  *                     isteğe bağlı ?scheduler=fifo|fastest|reputation&verifier=fixed2|fixed3|adaptive|accept_first
+ *                     Ödeme açıksa (payments.ts) x402 ile üst sınır ödenir: ödemesiz istek 402.
  *   GET  /jobs/:id
  *   GET  /workers
  *   GET  /modules     { bundleHash, modules: [{ name, hash, url }] }  (ajan ve istemciler için)
  *   GET  /, /*.html, /*.js, /pkg/*   gönüllü sayfası ve WASM (static.ts)
  */
-export function httpHandler(coord: Coordinator) {
+export function httpHandler(coord: Coordinator, payments: JobPayments | null = null) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
@@ -50,7 +55,7 @@ export function httpHandler(coord: Coordinator) {
       if (req.method === "GET" && url.pathname === "/modules") {
         return send(res, 200, { bundleHash: coord.wasmHash, modules: coord.modules });
       }
-      if (req.method === "POST" && url.pathname === "/jobs") {
+      if (req.method === "POST" && (url.pathname === "/jobs" || url.pathname === "/quote")) {
         let dag: unknown;
         try {
           dag = JSON.parse(await readBody(req));
@@ -58,8 +63,13 @@ export function httpHandler(coord: Coordinator) {
           return send(res, 400, { error: e instanceof Error ? e.message : "geçersiz JSON" });
         }
         try {
-          const opts = { scheduler: url.searchParams.get("scheduler") ?? undefined, verifier: url.searchParams.get("verifier") ?? undefined };
-          return send(res, 201, coord.submitJob(dag, opts));
+          if (url.pathname === "/quote") {
+            return send(res, 200, { quote: coord.quote(dag, jobOptionsFrom(url)), payment: payments?.paymentInfo() ?? null });
+          }
+          if (!payments) return send(res, 201, coord.submitJob(dag, jobOptionsFrom(url)));
+          const r = await payments.submit(req, url, dag);
+          if (r.kind === "respond") return send(res, r.status, r.body, r.headers);
+          return send(res, 201, { jobId: r.jobId, quote: r.quote, payment: { transaction: r.transaction, payer: r.payer } }, r.headers);
         } catch (e) {
           if (e instanceof DagError) return send(res, 400, { error: e.message });
           throw e;
