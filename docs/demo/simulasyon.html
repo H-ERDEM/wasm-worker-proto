@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Görsel simülasyon: iki doğrulama stratejisi yan yana</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --hair: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+    --blue: #2a78d6; --blue-soft: #cde2fb; --violet: #6250d6; --good: #0ca30c; --critical: #d03b3b; --warning: #fab219;
+    --good-text: #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --hair: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+      --blue: #3987e5; --blue-soft: #184f95; --violet: #9085e9; --good-text: #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1320px; margin: 0 auto; padding: 24px 24px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); margin: 0 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 12px 16px; position: sticky; top: 8px; z-index: 2; }
+  .seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: none; color: var(--ink); padding: 6px 12px; font: inherit; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--axis); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+  .btn { border: 1px solid var(--axis); background: none; color: var(--ink); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; min-width: 44px; }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; min-width: 96px; }
+  select { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink); }
+  .time { display: flex; align-items: center; gap: 10px; flex: 1 1 280px; }
+  .time input { flex: 1; accent-color: var(--blue); }
+  .clock { font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 150px; text-align: right; }
+  label.check { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 1000px) { .panels { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px; min-width: 0; }
+  .ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  .ph h2 { font-size: 16px; margin: 0; }
+  .ph .rule { color: var(--ink-2); font-size: 12.5px; }
+  .chip { font-size: 12px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--axis); color: var(--ink-2); white-space: nowrap; }
+  .chip.done { border-color: var(--good); color: var(--good-text); }
+  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .tile { border: 1px solid var(--hair); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .tile .k { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .v small { font-size: 12px; font-weight: 400; color: var(--ink-2); }
+  .tile.bad .v { color: var(--critical); }
+  .sec { font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 12px 0 6px; text-transform: none; }
+  .workers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .w { position: relative; border: 1px solid var(--hair); border-radius: 8px; padding: 6px 8px 8px; min-width: 0; }
+  .w .id { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .w .job { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 16px; }
+  .w.busy { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+  .w.spot { border-color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, transparent); }
+  .w.spot .job { color: var(--violet); font-weight: 600; }
+  .w.flash { background: color-mix(in srgb, var(--critical) 28%, transparent); border-color: var(--critical); }
+  .w .r { height: 4px; border-radius: 2px; background: var(--hair); margin-top: 4px; overflow: hidden; }
+  .w .r i { display: block; height: 100%; background: var(--ink-2); border-radius: 2px; }
+  .w.trusted .r i { background: var(--good); }
+  .w .badge { position: absolute; top: 5px; right: 5px; font-size: 10.5px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+  .w.trusted .badge.t { background: var(--good); color: #fff; }
+  .w .badge.t { display: none; }
+  .w.trusted .badge.t { display: block; }
+  body.reveal .w.faulty { outline: 2px dashed var(--critical); outline-offset: 1px; }
+  .w .fl { display: none; position: absolute; top: 6px; left: 54px; font-size: 10.5px; color: var(--critical); font-weight: 600; }
+  .panel.fixed .w .badge.t, .panel.fixed .w.trusted .badge.t { display: none; }
+  .panel.fixed .w.trusted .r i { background: var(--ink-2); }
+  body.reveal .w.faulty .fl { display: block; }
+  .tasks { display: grid; gap: 3px; }
+  .row { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 6px; }
+  .row .lbl { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .cells { display: grid; grid-template-columns: repeat(40, 1fr); gap: 2px; }
+  .c { aspect-ratio: 1; border-radius: 2px; border: 1px solid var(--hair); background: none; }
+  .c.READY { background: var(--blue-soft); border-color: var(--blue-soft); }
+  .c.RUNNING { background: var(--blue); border-color: var(--blue); }
+  .c.ACCEPTED { background: var(--good); border-color: var(--good); }
+  body.reveal .c.ACCEPTED.wrong { background: var(--critical); border-color: var(--critical); }
+  .c.FAILED { background: var(--ink); border-color: var(--ink); }
+  .feed { list-style: none; margin: 0; padding: 0; font-size: 12.5px; height: 132px; overflow: hidden; border-top: 1px solid var(--hair); }
+  .feed li { display: grid; grid-template-columns: 52px 14px 1fr; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--hair); }
+  .feed .ft { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .feed .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+  .feed .caught .dot, .feed .wrong .dot, .feed .failed .dot, .feed .invalidate .dot { background: var(--critical); }
+  .feed .trusted .dot, .feed .job .dot { background: var(--good); }
+  .feed .untrusted .dot { background: var(--warning); }
+  body:not(.reveal) .feed .wrong { display: none; }
+  .panel.fixed .feed .trusted, .panel.fixed .feed .untrusted { display: none; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 16px; color: var(--ink-2); font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--hair); display: inline-block; }
+  .note { color: var(--ink-2); font-size: 12.5px; margin-top: 16px; max-width: 900px; }
+  .err { padding: 24px; border: 1px solid var(--critical); border-radius: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Aynı tarayıcılar, aynı işler: sabit 2'li ve uyarlanabilir doğrulama yan yana</h1>
+  <p class="sub" id="sub"></p>
+
+  <div class="bar" role="toolbar" aria-label="Oynatma denetimleri">
+    <div class="seg" id="scenarios" aria-label="Senaryo"></div>
+    <button class="btn primary" id="play">▶ Oynat</button>
+    <button class="btn" id="restart" title="Baştan">↺</button>
+    <label>Hız <select id="speed">
+      <option value="0.25">0,25×</option><option value="0.5" selected>0,5×</option>
+      <option value="1">1×</option><option value="2">2×</option></select></label>
+    <div class="time"><input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Zaman"><span class="clock" id="clock"></span></div>
+    <label class="check"><input type="checkbox" id="reveal"> Gerçeği göster (hatalı tarayıcılar, yanlış sonuçlar)</label>
+  </div>
+
+  <div class="panels" id="panels"></div>
+
+  <div class="legend">
+    <span><i class="sw"></i>bekliyor</span>
+    <span><i class="sw" style="background:var(--blue-soft);border-color:var(--blue-soft)"></i>hazır</span>
+    <span><i class="sw" style="background:var(--blue);border-color:var(--blue)"></i>çalışıyor</span>
+    <span><i class="sw" style="background:var(--good);border-color:var(--good)"></i>kabul edildi</span>
+    <span><i class="sw" style="background:var(--critical);border-color:var(--critical)"></i>yanlış sonuç kabul edildi (gerçeği göster)</span>
+    <span><i class="sw" style="background:color-mix(in srgb, var(--violet) 14%, transparent);border-color:var(--violet)"></i>tarayıcı sınama işinde</span>
+    <span><i class="sw" style="background:var(--good);border-color:var(--good)"></i>tek kopya modu (R ≥ τ): yeşil çubuk ve rozet</span>
+  </div>
+
+  <p class="note" id="note"></p>
+</main>
+
+<script src="replay-player.js"></script>
+<script src="replay-data.js"></script>
+<script>
+"use strict";
+(function () {
+  const D = window.REPLAY, P = window.ReplayPlayer;
+  const $ = (id) => document.getElementById(id);
+  if (!D || !P) {
+    document.querySelector("main").innerHTML = "<div class='err'>Veri bulunamadı. Önce <code>cd sim && python -m vcsim.replay</code> çalıştırın; <code>replay-data.js</code> bu sayfanın yanında olmalı.</div>";
+    return;
+  }
+  const NAMES = {
+    fixed2: ["Sabit 2'li replikasyon", "her görev iki tarayıcıda; iki eşleşen sonuç kabul"],
+    fixed3: ["Sabit 3'lü + çoğunluk", "üç kopya; en az iki eşleşen sonuç"],
+    adaptive: ["Uyarlanabilir (itibar + sınama işi)", "güvenilir tarayıcı tek kopya; atamaların %10'u sınama işi"],
+    accept_first: ["accept_first (alt sınır)", "ilk sonuç kabul"],
+  };
+  const fmt = (x, d = 1) => x.toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  let sc = 0, playing = false, simT = 0, lastFrame = null, states = [], views = [], endT = 1;
+
+  function sceneButtons() {
+    const box = $("scenarios");
+    box.innerHTML = "";
+    D.scenarios.forEach((s, i) => {
+      const b = document.createElement("button");
+      b.textContent = s.title;
+      b.setAttribute("aria-pressed", String(i === sc));
+      b.onclick = () => { sc = i; load(); };
+      box.appendChild(b);
+    });
+  }
+
+  function buildPanel(run) {
+    const [title, rule] = NAMES[run.verifier] || [run.verifier, ""];
+    const el = document.createElement("section");
+    el.className = "panel" + (run.verifier === "adaptive" ? "" : " fixed");
+    el.innerHTML =
+      `<div class="ph"><div><h2>${title}</h2><div class="rule">${rule} · zamanlayıcı ${run.scheduler}</div></div><span class="chip" data-k="status">çalışıyor</span></div>
+       <div class="tiles">
+         <div class="tile"><div class="k">Tamamlanan iş</div><div class="v" data-k="jobs"></div></div>
+         <div class="tile"><div class="k">Maliyet (USDC)</div><div class="v" data-k="cost"></div></div>
+         <div class="tile" data-k="wrongTile"><div class="k">Yanlış kabul</div><div class="v" data-k="wrong"></div></div>
+         <div class="tile"><div class="k">Sınama işi</div><div class="v" data-k="spot"></div></div>
+         <div class="tile" data-k="caughtTile"><div class="k">Yakalanan</div><div class="v" data-k="caught"></div></div>
+       </div>
+       <div class="sec">Tarayıcılar (${run.workers.length}) · çubuk: itibar R${run.verifier === "adaptive" ? "" : " (bu stratejide kopya sayısını değiştirmez)"}</div>
+       <div class="workers" data-k="workers"></div>
+       <div class="sec">İşler: ${run.jobs.length} DAG × görevler (topolojik sırada)</div>
+       <div class="tasks" data-k="tasks"></div>
+       <div class="sec">Olaylar</div>
+       <ul class="feed" data-k="feed"></ul>`;
+    const q = (k) => el.querySelector(`[data-k="${k}"]`);
+    const wEls = {};
+    for (const w of run.workers) {
+      const d = document.createElement("div");
+      d.className = "w" + (w.faulty ? " faulty" : "");
+      d.innerHTML = `<div class="id">${w.id}</div><span class="badge t">tek kopya</span><div class="job">boşta</div><div class="fl">hatalı</div><div class="r"><i style="width:50%"></i></div>`;
+      d.title = w.id;
+      q("workers").appendChild(d);
+      wEls[w.id] = { el: d, job: d.querySelector(".job"), bar: d.querySelector(".r i"), last: "" };
+    }
+    const tEls = {};
+    run.jobs.forEach((j, n) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `<span class="lbl">iş ${n + 1}</span><div class="cells"></div>`;
+      const cells = row.querySelector(".cells");
+      for (const tid of j.tasks) {
+        const c = document.createElement("i");
+        c.className = "c";
+        c.title = `${j.id}/${tid} · ${j.modules ? j.modules[tid] : ""}`;
+        cells.appendChild(c);
+        tEls[j.id + "/" + tid] = { el: c, last: "" };
+      }
+      q("tasks").appendChild(row);
+    });
+    return { el, q, wEls, tEls, feedLen: -1 };
+  }
+
+  function load() {
+    const S = D.scenarios[sc], m = S.meta;
+    sceneButtons();
+    $("sub").textContent = `${m.workers} tarayıcı · ${m.dags} DAG × ${m.tasksPerDag} görev · hatalı tarayıcı oranı f = %${Math.round(m.f * 100)}` +
+      (m.collusion ? " (colluding: hepsi aynı yanlış sonucu verir)" : " (rastgele: yanlış sonuçlar eşleşmez)") +
+      ` · s = ${fmt(m.s, 1)} · τ = ${fmt(m.tau, 2)} · birim ücret ${m.unitPrice} USDC · tohum ${m.seed}`;
+    const faulty = S.runs[0].workers.filter((w) => w.faulty).length;
+    $("note").textContent = `Bu, simülatörün tek bir koşusudur (python -m vcsim.replay, tohum ${m.seed}). İki strateji aynı tohumu kullanır: ` +
+      `aynı ${m.workers} tarayıcı, aynı hızlar ve aynı ${faulty} hatalı tarayıcı. Stratejilerin istatistiksel karşılaştırması 30 tohumluk ` +
+      `deneylerle yapılır (docs/figures/hafta8). Maliyet her iş bitince ödenen birimlerle artar.`;
+    const panels = $("panels");
+    panels.innerHTML = "";
+    views = S.runs.map((r) => { const v = buildPanel(r); panels.appendChild(v.el); return v; });
+    endT = Math.max(...S.runs.map((r) => r.summary.makespan_ms || 0)) + 300;
+    seek(0);
+  }
+
+  function seek(t) {
+    const S = D.scenarios[sc];
+    states = S.runs.map((r) => P.advance(P.create(r, S.meta), t));
+    simT = t;
+    views.forEach((v) => (v.feedLen = -1));
+    render();
+  }
+
+  function render() {
+    const S = D.scenarios[sc];
+    $("clock").textContent = `${fmt(simT / 1000)} / ${fmt(endT / 1000)} s (simülasyon)`;
+    $("scrub").value = String(Math.round((simT / endT) * 1000));
+    states.forEach((s, i) => {
+      const v = views[i], c = P.counters(s), run = S.runs[i];
+      const done = s.end !== null;
+      const st = v.q("status");
+      st.textContent = done ? `bitti · ${fmt(s.end / 1000)} s` : "çalışıyor";
+      st.className = "chip" + (done ? " done" : "");
+      v.q("jobs").innerHTML = `${c.jobsDone}<small> / ${c.jobsTotal}</small>`;
+      v.q("cost").textContent = fmt(c.cost, 3);
+      v.q("cost").title = `${c.paidUnits} ödenen birim × ${S.meta.unitPrice} USDC`;
+      v.q("wrong").innerHTML = `${c.wrong}<small> görev</small>`;
+      v.q("wrongTile").className = "tile" + (c.wrong > 0 ? " bad" : "");
+      v.q("spot").textContent = run.verifier === "adaptive" ? String(c.spots) : "—";
+      v.q("caught").textContent = run.verifier === "adaptive" ? String(c.spotFail) : "—";
+      for (const id in v.wEls) {
+        const w = s.workers[id], e = v.wEls[id];
+        const flash = w.flashUntil > simT;
+        const cls = "w" + (w.faulty ? " faulty" : "") + (w.trusted ? " trusted" : "") +
+          (flash ? " flash" : w.busy ? (w.busy.spot ? " spot" : " busy") : "");
+        const job = flash ? "yakalandı" : w.busy ? (w.busy.spot ? "sınama işi" : `${w.busy.module} · ${P.short(s, w.busy.task)}`) : "boşta";
+        const key = cls + job + w.R;
+        if (key !== e.last) {
+          e.el.className = cls;
+          e.job.textContent = job;
+          e.bar.style.width = (w.R * 100).toFixed(1) + "%";
+          e.el.title = `${id} · R = ${w.R.toFixed(3)} · α = ${w.alpha}` + (w.caught ? ` · ${w.caught} kez yakalandı` : "");
+          e.last = key;
+        }
+      }
+      for (const k in v.tEls) {
+        const t = s.tasks[k], e = v.tEls[k];
+        const cls = "c " + t.state + (t.wrong ? " wrong" : "");
+        if (cls !== e.last) { e.el.className = cls; e.last = cls; }
+      }
+      if (s.feed.length !== v.feedLen) {
+        v.feedLen = s.feed.length;
+        const ul = v.q("feed");
+        ul.innerHTML = "";
+        for (const f of s.feed.slice(-12).reverse()) {
+          const li = document.createElement("li");
+          li.className = f.kind;
+          li.innerHTML = `<span class="ft">${fmt(f.t / 1000)} s</span><span class="dot"></span><span></span>`;
+          li.lastChild.textContent = f.text;
+          ul.appendChild(li);
+        }
+      }
+    });
+  }
+
+  function frame(now) {
+    if (!playing) return;
+    if (lastFrame !== null) {
+      const dt = Math.min(100, now - lastFrame) * Number($("speed").value);
+      simT = Math.min(endT, simT + dt);
+      states.forEach((s) => P.advance(s, simT));
+      render();
+      if (simT >= endT) { setPlaying(false); }
+    }
+    lastFrame = now;
+    if (playing) requestAnimationFrame(frame);
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    $("play").textContent = on ? "❚❚ Duraklat" : "▶ Oynat";
+    lastFrame = null;
+    if (on) {
+      if (simT >= endT) seek(0);
+      requestAnimationFrame(frame);
+    }
+  }
+
+  $("play").onclick = () => setPlaying(!playing);
+  $("restart").onclick = () => { seek(0); };
+  $("scrub").oninput = (e) => seek((Number(e.target.value) / 1000) * endT);
+  $("reveal").onchange = (e) => document.body.classList.toggle("reveal", e.target.checked);
+  document.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && e.target.tagName !== "INPUT" && e.target.tagName !== "SELECT") { e.preventDefault(); setPlaying(!playing); }
+  });
+  load();
+})();
+</script>
+</body>
+</html>

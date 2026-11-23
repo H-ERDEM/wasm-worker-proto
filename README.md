@@ -178,6 +178,19 @@ python -m vcsim.analyze ../experiments/data/sim/default-s1 ../coordinator/coordi
 
 `vcsim.analyze`, simülatör çıktısı ile koordinatörün SQLite kaydını **aynı metrik koduyla** okur: makespan, iş başına maliyet, görev ve iş düzeyinde hatalı sonuç oranı, kayıp ve zaman aşımı sayıları. Koordinatör kaydındaki doğru sonuç Python referansıyla hesaplanır.
 
+### Görsel simülasyon (ara demo)
+
+`docs/demo/simulasyon.html` simülatörün bir koşusunu tarayıcıda adım adım oynatır; sunucu gerektirmez (dosyayı çift tıklayıp açmak yeter). Aynı tohumla iki doğrulama stratejisi yan yana oynar: sabit 2'li ve uyarlanabilir. Gösterilenler: 16 tarayıcının o anki görevi, itibarı R ve tek kopya modu; 10 DAG'in görev durumları; sınamada yakalanma, tek kopya moduna geçme ve iş tamamlanma olayları; maliyet, yanlış kabul edilen görev ve sınama sayaçları. "Gerçeği göster" hatalı tarayıcıları ve kabul edilmiş yanlış sonuçları işaretler (koordinatör bunları bilmez).
+
+İki senaryo vardır: colluding ve rastgele hata, ikisinde de f = %20, s = 1. Veri dosyası `docs/demo/replay-data.js` şununla yeniden üretilir:
+
+```bash
+cd sim && python -m vcsim.replay              # tohum 3, fixed2 ve adaptive
+python -m vcsim.replay --seed 5 --set faults.f=0.3
+```
+
+Oynatıcı (`docs/demo/replay-player.js`) olayları sırayla işler. Sayfanın son sayaçlarının o koşunun `summary.json` değerleriyle aynı çıktığı `sim/tests/test_replay.py`'de denetlenir. Sayfa tek bir koşuyu gösterir; stratejilerin istatistiksel karşılaştırması 30 tohumluk deneylerle yapılır (`docs/figures/hafta8/`).
+
 ### x402 prototipi
 
 Bkz. [`payments/x402-proto/README.md`](payments/x402-proto/README.md): Solana Devnet üzerinde `402 → ödeme → 200` döngüsü, istemci harcama politikası ve Devnet'te elle çalıştırma adımları.
