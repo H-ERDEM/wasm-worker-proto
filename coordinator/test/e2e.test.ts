@@ -222,3 +222,107 @@ test("statik sunum: / gönüllü sayfasını verir, kaynak kod ve dizin gezintis
       assert.equal((await fetch(`${s.url}${p}`)).status, 404, p);
     }
   }));
+
+// ---------- 8. hafta: modül kaydı, moduleHash, image_blur ----------
+
+const BLUR_42_64x48x3 = "3894adbe0c4011c6f5b7e8e3c248b1275401d8082f8cb5be5483e3bc5b488863";
+
+async function withBundle(bytes: Buffer | null, fn: (s: Server, hash: string | null) => Promise<void>) {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "vc-wasm-"));
+  const path = join(dir, "vc_tasks_bg.wasm");
+  if (bytes) writeFileSync(path, bytes);
+  const s = await createServer({ config: FAST, wasmPath: path });
+  try {
+    await fn(s, bytes ? `sha256:${createHash("sha256").update(bytes).digest("hex")}` : null);
+  } finally {
+    await s.close();
+  }
+}
+
+test("GET /modules ve welcome: paket özeti ve şemadaki tüm modüller", () =>
+  withBundle(Buffer.from("sahte wasm paketi"), async (s, hash) => {
+    const body = (await (await fetch(`${s.url}/modules`)).json()) as { bundleHash: string; modules: { name: string; hash: string; url: string }[] };
+    assert.equal(body.bundleHash, hash);
+    assert.deepEqual(body.modules.map((m) => m.name), ["sha_chain", "matmul", "image_blur", "debug_panic"]);
+    assert.ok(body.modules.every((m) => m.hash === hash && m.url === "/pkg/vc_tasks_bg.wasm"));
+    const welcome = await new Promise<{ modules: unknown }>((resolve) => {
+      const ws = new WebSocket(s.wsUrl);
+      ws.on("open", () => ws.send(JSON.stringify({ type: "hello", consent: true })));
+      ws.on("message", (d) => {
+        const m = JSON.parse(d.toString());
+        if (m.type === "welcome") {
+          ws.close();
+          resolve(m);
+        }
+      });
+    });
+    assert.deepEqual(welcome.modules, body.modules);
+  }));
+
+test("moduleHash: verilmezse koordinatör paketi bağlar, eşleşen kabul, eşleşmeyen 400", () =>
+  withBundle(Buffer.from("sahte wasm paketi"), async (s, hash) => {
+    const w = startFakeWorker(s.wsUrl);
+    try {
+      await w.id;
+      const single = readShared<{ tasks: { moduleHash?: string }[] }>("examples/single-task.json");
+      const j1 = await submit(s, single);
+      assert.equal((await waitJob(s, j1)).status, "COMPLETED");
+      assert.equal(w.assigns.at(-1)!.moduleHash, hash);
+
+      const pinned = { ...single, tasks: single.tasks.map((t) => ({ ...t, moduleHash: hash })) };
+      assert.equal((await waitJob(s, await submit(s, pinned))).status, "COMPLETED");
+
+      const wrong = { ...single, tasks: single.tasks.map((t) => ({ ...t, moduleHash: `sha256:${"0".repeat(64)}` })) };
+      const res = await fetch(`${s.url}/jobs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(wrong) });
+      assert.equal(res.status, 400);
+      assert.match(((await res.json()) as { error: string }).error, /moduleHash/);
+    } finally {
+      w.close();
+    }
+  }));
+
+test("paket derlenmemişse: özet null, assign'da moduleHash yok, moduleHash veren iş 400", () =>
+  withBundle(null, async (s) => {
+    const body = (await (await fetch(`${s.url}/modules`)).json()) as { bundleHash: string | null; modules: { hash: unknown; url: unknown }[] };
+    assert.equal(body.bundleHash, null);
+    assert.ok(body.modules.every((m) => m.hash === null && m.url === null));
+    const w = startFakeWorker(s.wsUrl);
+    try {
+      await w.id;
+      const single = readShared<{ tasks: object[] }>("examples/single-task.json");
+      assert.equal((await waitJob(s, await submit(s, single))).status, "COMPLETED");
+      assert.equal(w.assigns.at(-1)!.moduleHash, undefined);
+      const withHash = { ...single, tasks: single.tasks.map((t) => ({ ...t, moduleHash: `sha256:${"a".repeat(64)}` })) };
+      const res = await fetch(`${s.url}/jobs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(withHash) });
+      assert.equal(res.status, 400);
+    } finally {
+      w.close();
+    }
+  }));
+
+test("image_blur → sha_chain DAG: vektörle aynı çıktı, $ref ile zincir", () =>
+  withServer(FAST, async (s) => {
+    const w = startFakeWorker(s.wsUrl);
+    try {
+      await w.id;
+      const jobId = await submit(s, {
+        version: 0,
+        tasks: [
+          { id: "blur", module: "image_blur", input: { seed: 42, w: 64, h: 48, passes: 3 } },
+          { id: "hash", module: "sha_chain", input: { seed: { $ref: "blur.output.hash" }, iterations: 1 }, deps: ["blur"] },
+        ],
+      });
+      const job = await waitJob(s, jobId);
+      assert.equal(job.status, "COMPLETED");
+      assert.equal(job.tasks[0].output!.hash, BLUR_42_64x48x3);
+      const expected = createHash("sha256").update(BLUR_42_64x48x3, "utf8").digest("hex");
+      assert.equal(job.tasks[1].output!.hash, expected);
+      const blurRow = s.db.all("SELECT cost FROM tasks WHERE job_id = ? AND dag_task_id = 'blur'", jobId)[0];
+      assert.equal(blurRow.cost, 64 * 48 * 3);
+    } finally {
+      w.close();
+    }
+  }));

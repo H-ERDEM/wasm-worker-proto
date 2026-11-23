@@ -36,6 +36,7 @@ function readBody(req: IncomingMessage): Promise<string> {
  *   POST /jobs        gövde: DAG v0  → 201 { jobId }
  *   GET  /jobs/:id
  *   GET  /workers
+ *   GET  /modules     { bundleHash, modules: [{ name, hash, url }] }  (ajan ve istemciler için)
  *   GET  /, /*.html, /*.js, /pkg/*   gönüllü sayfası ve WASM (static.ts)
  */
 export function httpHandler(coord: Coordinator) {
@@ -45,6 +46,9 @@ export function httpHandler(coord: Coordinator) {
       if (req.method === "OPTIONS") return send(res, 204, null);
       if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true });
       if (req.method === "GET" && url.pathname === "/workers") return send(res, 200, coord.listWorkers());
+      if (req.method === "GET" && url.pathname === "/modules") {
+        return send(res, 200, { bundleHash: coord.wasmHash, modules: coord.modules });
+      }
       if (req.method === "POST" && url.pathname === "/jobs") {
         let dag: unknown;
         try {

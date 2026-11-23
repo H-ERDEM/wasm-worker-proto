@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Config } from "./config.ts";
 import { Db } from "./db/db.ts";
+import { moduleRegistry, type ModuleInfo } from "./modules.ts";
 import { canonicalJson, DagError, resolveRefs, taskCost, validateDag, type Dag, type DagTask } from "./queue/dag.ts";
 import {
   schedulers, verifiers,
@@ -40,6 +41,8 @@ interface Task {
   inputResolved: string | null;
   acceptedOutput: string | null;
   replicaIds: number[];
+  /** Görevin bağlı olduğu WASM paketi özeti (modules.ts); paket yoksa null. */
+  moduleHash: string | null;
 }
 
 interface Replica {
@@ -86,6 +89,9 @@ export class Coordinator {
   readonly db: Db;
   readonly scheduler: Scheduler;
   readonly verifier: Verifier;
+  /** Başlangıçta hesaplanan WASM paketi özeti; paket derlenmemişse null. */
+  readonly wasmHash: string | null;
+  readonly modules: ModuleInfo[];
 
   private workers = new Map<string, Worker>();
   private jobs = new Map<string, Job>();
@@ -96,9 +102,11 @@ export class Coordinator {
   private timer: NodeJS.Timeout | null = null;
   private lastPingAt = 0;
 
-  constructor(cfg: Config, db: Db) {
+  constructor(cfg: Config, db: Db, opts: { wasmHash?: string | null } = {}) {
     this.cfg = cfg;
     this.db = db;
+    this.wasmHash = opts.wasmHash ?? null;
+    this.modules = moduleRegistry(this.wasmHash);
     const s = schedulers[cfg.scheduler];
     const v = verifiers[cfg.verifier];
     if (!s) throw new Error(`bilinmeyen zamanlayıcı "${cfg.scheduler}"`);
@@ -123,6 +131,13 @@ export class Coordinator {
 
   submitJob(raw: unknown): { jobId: string } {
     const { dag, order } = validateDag(raw);
+    for (const t of dag.tasks) {
+      if (t.moduleHash !== undefined && t.moduleHash !== this.wasmHash) {
+        throw new DagError(
+          `"${t.id}": moduleHash koordinatördeki WASM paketiyle eşleşmiyor (koordinatör: ${this.wasmHash ?? "paket derlenmemiş"})`,
+        );
+      }
+    }
     const jobId = `job_${randomUUID().slice(0, 8)}`;
     const now = Date.now();
     const children = new Map<string, string[]>(dag.tasks.map((t) => [t.id, []]));
@@ -140,7 +155,7 @@ export class Coordinator {
       const def = byId.get(id)!;
       const task: Task = {
         key: `${jobId}/${id}`, jobId, def, cost: taskCost(def), state: "WAITING",
-        inputResolved: null, acceptedOutput: null, replicaIds: [],
+        inputResolved: null, acceptedOutput: null, replicaIds: [], moduleHash: def.moduleHash ?? this.wasmHash,
       };
       this.tasks.set(task.key, task);
       job.taskKeys.push(task.key);
@@ -169,6 +184,7 @@ export class Coordinator {
         return {
           id: t.def.id,
           module: t.def.module,
+          moduleHash: t.moduleHash,
           state: t.state,
           output: t.acceptedOutput ? JSON.parse(t.acceptedOutput) : null,
           replicas: t.replicaIds.length,
@@ -202,7 +218,7 @@ export class Coordinator {
       first_seen: now, last_seen: now,
     });
     this.db.log("info", "worker_connected", { id });
-    conn.send({ type: "welcome", workerId: id, heartbeatMs: this.cfg.heartbeatMs, modules: [] });
+    conn.send({ type: "welcome", workerId: id, heartbeatMs: this.cfg.heartbeatMs, modules: this.modules });
     this.dispatch();
     return id;
   }
@@ -455,6 +471,7 @@ export class Coordinator {
     w.conn.send({
       type: "assign", replicaId: r.id, module: task.def.module,
       input: task.inputResolved, deadlineMs: this.cfg.taskTimeoutMs,
+      ...(task.moduleHash ? { moduleHash: task.moduleHash } : {}),
     });
     const views = task.replicaIds.map((id) => this.replicaView(this.replicas.get(id)!));
     const d = this.verifier.onAssign(this.taskView(task), views, this.workerView(w), Math.random());

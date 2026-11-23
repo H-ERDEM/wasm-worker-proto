@@ -47,7 +47,7 @@ export class WorkerClient {
     this.start();
   }
 
-  run(module, input, impl = "wasm", timeoutMs = this.timeoutMs) {
+  run(module, input, impl = "wasm", timeoutMs = this.timeoutMs, moduleHash = undefined) {
     const taskId = this.nextId++;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -56,7 +56,7 @@ export class WorkerClient {
         resolve({ taskId, status: "error", output: `timeout after ${timeoutMs} ms`, durationMs: 0 });
       }, timeoutMs);
       this.pending.set(taskId, { resolve, timer });
-      this.worker.postMessage({ taskId, module, input, impl });
+      this.worker.postMessage({ taskId, module, input, impl, ...(moduleHash ? { moduleHash } : {}) });
     });
   }
 }

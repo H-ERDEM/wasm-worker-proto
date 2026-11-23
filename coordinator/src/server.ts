@@ -5,17 +5,20 @@ import { Coordinator } from "./coordinator.ts";
 import { Db } from "./db/db.ts";
 import { httpHandler } from "./api/http.ts";
 import { attachHub } from "./ws/hub.ts";
+import { bundleHash, DEFAULT_WASM_PATH } from "./modules.ts";
 
 export interface ServerOptions {
   port?: number;
   host?: string;
   dbPath?: string;
   config?: Partial<Config>;
+  /** WASM paketi; varsayılan pkg/vc_tasks_bg.wasm. Özeti başlangıçta bir kez hesaplanır. */
+  wasmPath?: string;
 }
 
 export async function createServer(opts: ServerOptions = {}) {
   const db = new Db(opts.dbPath ?? ":memory:");
-  const coord = new Coordinator(loadConfig(opts.config), db);
+  const coord = new Coordinator(loadConfig(opts.config), db, { wasmHash: bundleHash(opts.wasmPath ?? DEFAULT_WASM_PATH) });
   const http = createHttpServer(httpHandler(coord));
   const wss = attachHub(http, coord);
   await new Promise<void>((resolve) => http.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve));

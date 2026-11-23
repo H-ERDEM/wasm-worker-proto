@@ -143,7 +143,7 @@ class Volunteer {
 
   async runAssignment(msg) {
     ui.state(`çalışıyor: ${msg.module} (#${msg.replicaId})`);
-    const raw = await this.client.run(msg.module, msg.input, cfg.impl, msg.deadlineMs);
+    const raw = await this.client.run(msg.module, msg.input, cfg.impl, msg.deadlineMs, msg.moduleHash);
     const res = await maybeCorrupt(msg.module, msg.input, raw);
     // Ara verilecekse durum mesajı sonuçtan ÖNCE gider; böylece koordinatör yeni görev atamaz.
     const cooling = this.cooldownMs > 0;
