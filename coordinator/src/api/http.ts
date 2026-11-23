@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { networkInterfaces } from "node:os";
 import { REPO_ROOT } from "../config.ts";
 import type { DemoBuyer } from "./demo-buyer.ts";
+import type { PayoutService } from "../payouts.ts";
 import { serveStatic } from "./static.ts";
 
 const EXAMPLES_DIR = join(REPO_ROOT, "shared", "examples");
@@ -64,7 +65,7 @@ function readBody(req: IncomingMessage): Promise<string> {
  *   GET  /demo/info             ödeme ve alıcı bilgisi
  *   POST /demo/buy?verifier=&scheduler=&maxUsdc=   gövde: DAG v0; alıcı x402 ile öder (yalnızca aynı makineden)
  */
-export function httpHandler(coord: Coordinator, payments: JobPayments | null = null, demo: { buyer: DemoBuyer | null; listensOnAll?: boolean } = { buyer: null }) {
+export function httpHandler(coord: Coordinator, payments: JobPayments | null = null, demo: { buyer: DemoBuyer | null; listensOnAll?: boolean; payouts?: PayoutService | null } = { buyer: null }) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
@@ -148,6 +149,7 @@ export function httpHandler(coord: Coordinator, payments: JobPayments | null = n
       const m = url.pathname.match(/^\/jobs\/([A-Za-z0-9_-]+)$/);
       if (req.method === "GET" && m) {
         const job = coord.getJob(m[1]);
+        if (job?.payment && demo.payouts) Object.assign(job.payment, { payouts: demo.payouts.forJob(job.jobId) });
         return job ? send(res, 200, job) : send(res, 404, { error: "iş bulunamadı" });
       }
       if (req.method === "GET" && (await serveStatic(url.pathname, res))) return;

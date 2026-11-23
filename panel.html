@@ -68,6 +68,15 @@
   .ledger table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   .ledger td { padding: 3px 0; border-bottom: 1px solid var(--hair); }
   .ledger td:last-child { text-align: right; font-weight: 600; }
+  .ledger .t.sub { margin-top: 12px; font-weight: 600; }
+  .ledger table.payouts td:nth-child(2) { text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .ledger table.payouts td.st { font-weight: 600; text-align: right; white-space: nowrap; padding-left: 10px; }
+  .ledger table.payouts td { vertical-align: top; padding: 5px 0; }
+  .ledger table.payouts .u { font-size: 11.5px; color: var(--ink-2); }
+  .ledger td.st.confirmed, .ledger td.st.confirmed a { color: var(--good-text); }
+  .ledger td.st.failed { color: var(--critical); }
+  .ledger td.st.no_wallet, .ledger td.st.pending { color: var(--ink-2); }
+  .ledger td.st.sent { color: var(--blue); }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .jobhead { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 10px; color: var(--ink-2); font-size: 13px; }
   .jobhead b { color: var(--ink); font-size: 16px; }
@@ -397,7 +406,34 @@
     row("Ödenen üst sınır", `${usdc(p.capAtomic)} USDC`);
     row("Gerçekleşen maliyet", done ? `${usdc(p.realizedAtomic)} USDC` : "iş bitince", "var(--blue)");
     row("İade edilecek", done ? `${usdc(p.refundDueAtomic)} USDC` : "iş bitince", "var(--good)");
-    box.append(bar, table, el("div", "hint", "Zincir üstü iade 10. haftada eklenecek."));
+    box.append(bar, table);
+    // 10. hafta: ödemeler (worker'lara doğrulanmış iş başına, alıcıya iade) ve işlem bağlantıları.
+    const pays = p.payouts || [];
+    if (!pays.length) {
+      box.append(el("div", "hint", done ? "Ödeme planı iş kesinleşince çıkar (geç dönen sınama işleri beklenir)." : ""));
+      return;
+    }
+    const ST = { pending: "bekliyor", sent: "gönderildi", confirmed: "onaylandı", no_wallet: "adres yok", failed: "başarısız" };
+    const pt = el("table", "payouts");
+    for (const x of pays) {
+      const tr = el("tr");
+      const who = el("td");
+      who.append(x.kind === "refund" ? "Alıcıya iade" : nameOf(x.payee));
+      if (x.kind !== "refund") who.append(el("div", "u", `${x.units} doğrulanmış birim`));
+      const st = el("td", `st ${x.status}`);
+      if (x.transaction && x.status === "confirmed") {
+        const a = el("a", "", `${ST[x.status]} ↗`);
+        a.href = `https://explorer.solana.com/tx/${x.transaction}?cluster=devnet`;
+        a.target = "_blank"; a.rel = "noopener";
+        st.append(a);
+      } else st.textContent = ST[x.status] || x.status;
+      if (x.error) st.title = x.error;
+      tr.append(who, el("td", "", `${usdc(x.amountAtomic)}`), st);
+      pt.append(tr);
+    }
+    const sent = pays.some((x) => x.transaction);
+    box.append(el("div", "t sub", "Ödemeler (Devnet USDC)"), pt,
+      el("div", "hint", sent ? "Tüm ödemeler platform cüzdanından tek işlemde gönderilir." : "Gönderim kapalı ya da sırada (PAYOUTS=1 ile Devnet'e gönderilir)."));
   }
 
   // ---------- Tarayıcılar ----------
@@ -447,6 +483,9 @@
       case "retroactive_cancel": return ["bad", `geriye dönük iptal: ${d.tasks.length} görev yeniden hesaplanacak (${nameOf(d.workerId)})`];
       case "late_detection": return ["bad", `${nameOf(d.workerId)} bitmiş işte tek kopyayla kabul edilmiş sonuçlar içeriyor`];
       case "job_finished": return [d.state === "COMPLETED" ? "good" : "bad", `${d.jobId} ${d.state === "COMPLETED" ? "tamamlandı" : "başarısız"}`];
+      case "payouts_planned": return ["pay", `${d.jobId}: ödeme planı çıktı (${d.rows} kalem)${d.chain === "on" ? "" : ", gönderim kapalı"}`];
+      case "payout_confirmed": return ["good", `ödemeler zincirde onaylandı: işlem ${short(d.signature, 6)}`];
+      case "payout_failed": return ["bad", `ödeme işlemi başarısız (${d.status})${d.retry ? ", yeniden denenecek" : ""}`];
       case "task_failed": return ["bad", `görev başarısız: ${d.task}`];
       case "replica_lost": return ["warn", `${nameOf(d.workerId)} bağlantıyı kaybetti; görev yeniden kuyruğa alındı`];
       case "replica_timed_out": return ["warn", `${nameOf(d.workerId)} süre aşımı; görev yeniden kuyruğa alındı`];
@@ -496,7 +535,12 @@
       renderWorkers(ws);
       if (jobId && !jobDone) {
         const job = await fetch(`/jobs/${jobId}`).then((r) => r.json());
-        if (job && job.jobId) { renderJob(job); if (job.status !== "RUNNING" && job.payment?.realizedAtomic != null) jobDone = true; if (job.status !== "RUNNING" && !job.payment) jobDone = true; }
+        if (job && job.jobId) {
+          renderJob(job);
+          const pays = job.payment?.payouts || [];
+          const settled = pays.length > 0 && pays.every((x) => ["confirmed", "no_wallet", "failed"].includes(x.status));
+          if (job.status !== "RUNNING" && (!job.payment || settled)) jobDone = true;
+        }
       }
     } catch {
       $("conn").textContent = "koordinatöre ulaşılamıyor";

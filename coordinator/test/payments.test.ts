@@ -300,3 +300,63 @@ test("panel uç noktaları: örnek DAG'ler, olay kaydı, panel sayfası; worker 
       w.close();
     }
   }, "TX_PANEL"));
+
+// ---------- 10.1: iş kesinleşince worker ödemeleri ve iade ----------
+
+test("ödenmiş iş kesinleşince plan: worker başına doğrulanmış kopya × birim, alıcıya iade; toplam = üst sınır; zincire gönderilir", async () => {
+  const sent: { to: string; amountAtomic: number }[][] = [];
+  const chain = {
+    async sign(transfers: { to: string; amountAtomic: number }[]) {
+      sent.push(transfers);
+      return { signature: `SIG${sent.length}`, blockhash: "BH", lastValidBlockHeight: 1, send: async () => {} };
+    },
+    async status() { return { status: "confirmed" as const }; },
+  };
+  const s = await createServer({ config: FAST, oracle: jsOracle, payments: { payTo: PAY_TO, facilitatorUrl: fUrl }, payouts: { chain, pollMs: 1 } });
+  const WA = "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF", WB = "8fG4mWUr2cMrcVrMRD1pSodKSffekd5a4Zj7EBm5XiiY";
+  const w1 = startFakeWorker(s.wsUrl, { wallet: WA }), w2 = startFakeWorker(s.wsUrl, { wallet: WB });
+  try {
+    const [id1, id2] = await Promise.all([w1.id, w2.id]);
+    assert.equal(s.coord.listWorkers().find((w) => w.id === id1)!.wallet, WA);
+    const sig = await payHeader(s, dag(3), "?verifier=fixed2", "TX_PAYOUT");
+    const out = (await (await postJobs(s, dag(3), "?verifier=fixed2", { "PAYMENT-SIGNATURE": sig })).json()) as { jobId: string };
+    const end = Date.now() + 10000;
+    let job: { payment?: { payouts?: { kind: string; payee: string; amountAtomic: number; status: string; units: number | null }[]; refundTransaction?: string | null } } = {};
+    while (Date.now() < end) {
+      job = (await (await fetch(`${s.url}/jobs/${out.jobId}`)).json()) as typeof job;
+      if (job.payment?.payouts?.length && job.payment.payouts.every((p) => p.status === "confirmed")) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const p = job.payment!.payouts!;
+    // fixed2, 3 görev, 2 worker: her worker 3 doğrulanmış kopya → 3000; iade 30 000 − 6000 = 24 000
+    assert.deepEqual(p.map((x) => [x.kind, x.payee, x.units, x.amountAtomic, x.status]).sort(), [
+      ["refund", "payer", null, 24000, "confirmed"],
+      ["worker", id1, 3, 3000, "confirmed"],
+      ["worker", id2, 3, 3000, "confirmed"],
+    ].sort());
+    assert.equal(p.reduce((n, x) => n + x.amountAtomic, 0), 30000, "toplam = ödenen üst sınır");
+    assert.equal(job.payment!.refundTransaction, "SIG1");
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].map((t) => t.to).sort(), [WA, WB, BUYER].sort());
+  } finally {
+    w1.close();
+    w2.close();
+    await s.close();
+  }
+});
+
+test("ödemesiz işte (ödeme kapalı) worker ödeme planı çıkarılmaz", async () => {
+  const s = await createServer({ config: FAST, oracle: jsOracle });
+  const w = startFakeWorker(s.wsUrl, { wallet: "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF" });
+  try {
+    await w.id;
+    const { jobId } = s.coord.submitJob(dag(2), { verifier: "accept_first" });
+    const end = Date.now() + 10000;
+    while (s.coord.getJob(jobId)!.status === "RUNNING" && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(s.db.all("SELECT COUNT(*) AS n FROM payouts")[0].n, 0);
+    assert.equal(s.payouts, null);
+  } finally {
+    w.close();
+    await s.close();
+  }
+});

@@ -56,6 +56,8 @@ export interface FakeWorkerOptions {
   delayMs?: number;
   workerId?: string;
   fault?: Fault;
+  /** Ödeme adresi (hello.wallet). */
+  wallet?: string;
 }
 
 export interface FakeWorker {
@@ -78,7 +80,7 @@ export function startFakeWorker(wsUrl: string, opts: FakeWorkerOptions = {}): Fa
   const closed = new Promise<{ code: number }>((r) => ws.on("close", (code) => r({ code })));
 
   ws.on("open", () => {
-    ws.send(JSON.stringify({ type: "hello", consent: true, deviceClass: "node", impls: ["wasm"], userAgent: "fake-worker", ...(opts.workerId ? { workerId: opts.workerId } : {}) }));
+    ws.send(JSON.stringify({ type: "hello", consent: true, deviceClass: "node", impls: ["wasm"], userAgent: "fake-worker", ...(opts.workerId ? { workerId: opts.workerId } : {}), ...(opts.wallet ? { wallet: opts.wallet } : {}) }));
   });
 
   ws.on("message", (data) => {

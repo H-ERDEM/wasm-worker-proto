@@ -362,3 +362,18 @@ test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı
     await t.teardown();
   }
 });
+
+test("ödeme adresi: geçerli Solana adresi hello'da gider ve saklanır; geçersiz adres yok sayılır", async () => {
+  const t = await setup();
+  try {
+    const good = "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF";
+    const page = await t.openWorker(`autostart=1&cpu=high&wallet=${good}`);
+    await t.openWorker("autostart=1&cpu=high&wallet=0xdeadbeef");
+    const ws = await t.waitWorkers(2);
+    assert.deepEqual(ws.map((w) => w.wallet).sort(), [good, null].sort());
+    await page.waitForFunction(() => document.getElementById("walletShown").textContent.startsWith("FKqF"));
+    assert.equal(t.s.db.all("SELECT COUNT(*) AS n FROM workers WHERE wallet = ?", good)[0].n, 1);
+  } finally {
+    await t.teardown();
+  }
+});

@@ -159,6 +159,25 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay 
 
 `--pay` alıcı anahtarını (`BUYER_PRIVATE_KEY`) kullanır; `--replay` ödemeden sonra aynı ödeme başlığını bir kez daha gönderip reddedildiğini gösterir; istemci politikası yalnızca Devnet, yalnızca Devnet USDC ve en fazla `--max-usdc` (varsayılan 1) öder.
 
+### Worker ödemeleri ve iade (10. hafta)
+
+Ödenmiş bir iş **kesinleşince** (bitti ve ona yansıtılan sınama işlerinin hepsi sonuçlandı) koordinatör bir ödeme planı çıkarır ve `payouts` tablosuna yazar (`coordinator/src/payouts.ts`):
+
+- her worker'a, kabul anında eşleşen kopyaları ve geçtiği sınama işleri kadar birim ücret (0,001 USDC);
+- alıcıya üst sınır − gerçekleşen maliyet (iade). Kalemlerin toplamı ödenen üst sınıra eşittir.
+
+Worker gönüllü sayfasındaki "Ödeme adresi" alanına (ya da `?wallet=`) bir Solana Devnet adresi girerse ödemesi oraya yapılır; adres yoksa kalem `no_wallet` olarak kalır. Ödemesiz işlerde plan çıkarılmaz.
+
+`PAYOUTS=1` ile plan Devnet'e gönderilir: platform cüzdanından **tek işlemde** toplu USDC transferi (alıcının token hesabı yoksa açılır; `coordinator/src/solana-chain.ts`). İade işleminin imzası `jobs.refund_tx`'e, tüm ödemeler `GET /jobs/:id` → `payment.payouts`'a ve panelin emanet defterine yansır.
+
+Çift ödemeye karşı: (iş, tür, alıcı) tekil; işlem imzası yayından **önce** kaydedilir ve yeniden başlatmada aynı imza sorgulanır; yalnızca zincire hiç girmediği kesinleşen (blok karması süresi dolmuş) ya da zincirde hata veren işlem yeniden imzalanır (en fazla 3 deneme).
+
+```bash
+HOST=0.0.0.0 PAYMENTS=1 PAYOUTS=1 npm run coordinator   # PLATFORM_PRIVATE_KEY .env'de
+```
+
+Platform adresinde işlem ücreti ve yeni token hesabı kirası için biraz **Devnet SOL** gerekir (https://faucet.solana.com). RPC varsayılanı `https://api.devnet.solana.com` (`RPC_URL` ile değişir).
+
 ### Gönüllü sayfası URL parametreleri
 
 | Parametre | Açıklama |
@@ -167,6 +186,7 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay 
 | `cpu=low\|medium\|high` | Görevler arası 5 sn / 1 sn / 0 ara |
 | `impl=js` | WASM yerine saf JS (karşılaştırma ve WASM'siz test için) |
 | `autostart=1` | Onay ekranını atlar; **yalnızca araştırmacının kendi cihazlarında** deney için |
+| `wallet=<adres>` | Ödeme adresi (Solana Devnet); onay ekranındaki alanla aynı |
 | `fault=random\|collude&s=0.2` | Deney modu: `s` olasılıkla kasıtlı yanlış sonuç (biçim gerçek çıktıyla aynı) |
 
 **On-off saldırgan (ara demo).** Worker kimliği tarayıcının `localStorage`'ında, itibarı koordinatörün veritabanında tutulur. Dürüst çalışıp tek kopya moduna geçmiş bir sekme aynı adreste `fault=random&s=1` ile yeniden açılırsa aynı kimlik ve itibarla hile yapmaya başlar: sonuçları tek kopyayla kabul edilir, ilk sınama işinde yakalanır ve bitmemiş işlerdeki tek kopyalı sonuçları geriye dönük iptal edilip yeniden hesaplanır (`test/volunteer-e2e.mjs`, "on-off saldırgan").

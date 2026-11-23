@@ -13,7 +13,8 @@
         "userAgent": { "type": "string", "maxLength": 512 },
         "deviceClass": { "type": "string", "enum": ["desktop", "mobile", "tablet", "node", "unknown"] },
         "impls": { "type": "array", "items": { "type": "string", "enum": ["wasm", "js"] } },
-        "consent": { "const": true }
+        "consent": { "const": true },
+        "wallet": { "type": "string", "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$", "description": "İsteğe bağlı Solana (Devnet) adresi; doğrulanmış işlerin ödemesi buraya yapılır" }
       }
     },
     {
