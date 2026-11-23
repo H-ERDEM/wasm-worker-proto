@@ -155,7 +155,7 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --quot
 npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay --max-usdc 0.1 --wait
 ```
 
-`--pay` alıcı anahtarını (`BUYER_PRIVATE_KEY`) kullanır; istemci politikası yalnızca Devnet, yalnızca Devnet USDC ve en fazla `--max-usdc` (varsayılan 1) öder.
+`--pay` alıcı anahtarını (`BUYER_PRIVATE_KEY`) kullanır; `--replay` ödemeden sonra aynı ödeme başlığını bir kez daha gönderip reddedildiğini gösterir; istemci politikası yalnızca Devnet, yalnızca Devnet USDC ve en fazla `--max-usdc` (varsayılan 1) öder.
 
 ### Gönüllü sayfası URL parametreleri
 
