@@ -50,6 +50,7 @@ interface Replica {
   output: string | null;
   fatal: boolean;
   deadlineAt: number | null;
+  aloneOk: boolean;
 }
 
 interface Job {
@@ -307,7 +308,7 @@ export class Coordinator {
   private createReplicas(task: Task, count: number): void {
     const now = Date.now();
     for (let i = 0; i < count; i++) {
-      const r: Replica = { id: this.nextReplicaId++, taskKey: task.key, workerId: null, state: "QUEUED", output: null, fatal: false, deadlineAt: null };
+      const r: Replica = { id: this.nextReplicaId++, taskKey: task.key, workerId: null, state: "QUEUED", output: null, fatal: false, deadlineAt: null, aloneOk: false };
       this.replicas.set(r.id, r);
       task.replicaIds.push(r.id);
       this.queue.push(r.id);
@@ -410,11 +411,20 @@ export class Coordinator {
     this.db.log("info", "job_finished", { jobId: job.id, state });
   }
 
-  /** Kuyruktaki kopyaları (FIFO) boştaki worker'lara dağıtır. */
+  /**
+   * Kuyruktaki kopyaları (FIFO) boştaki worker'lara dağıtır. onAssign yeni kopya açabilir;
+   * boşta worker kaldıkça aynı çağrıda onları da atar (sim/vcsim/coordinator.py ile aynı).
+   */
   private dispatch(): void {
+    while (this.dispatchPass());
+  }
+
+  private dispatchPass(): boolean {
+    const idle = [...this.workers.values()].filter((w) => w.busyReplica === null && w.available);
+    let assigned = false;
     for (const rid of [...this.queue]) {
-      const idle = [...this.workers.values()].filter((w) => w.busyReplica === null && w.available);
-      if (idle.length === 0) return;
+      if (idle.length === 0) break;
+      if (!this.queue.includes(rid)) continue;
       const r = this.replicas.get(rid)!;
       const task = this.tasks.get(r.taskKey)!;
       // Doğrulama için aynı görevin başarılı kopyaları farklı worker'larda çalışmalı.
@@ -422,8 +432,12 @@ export class Coordinator {
       const eligible = idle.filter((w) => !done.has(w.id));
       const picked = this.scheduler.pick(this.taskView(task), eligible.map((w) => this.workerView(w)));
       if (!picked) continue;
-      this.assign(r, this.workers.get(picked.id)!, task);
+      const w = this.workers.get(picked.id)!;
+      idle.splice(idle.indexOf(w), 1);
+      this.assign(r, w, task);
+      assigned = true;
     }
+    return assigned;
   }
 
   private assign(r: Replica, w: Worker, task: Task): void {
@@ -442,15 +456,20 @@ export class Coordinator {
       type: "assign", replicaId: r.id, module: task.def.module,
       input: task.inputResolved, deadlineMs: this.cfg.taskTimeoutMs,
     });
+    const views = task.replicaIds.map((id) => this.replicaView(this.replicas.get(id)!));
+    const d = this.verifier.onAssign(this.taskView(task), views, this.workerView(w), Math.random());
+    r.aloneOk = d.aloneOk;
+    if (d.extra > 0) this.createReplicas(task, d.extra);
   }
 
   private taskView(t: Task): TaskView {
     return { key: t.key, module: t.def.module, cost: t.cost };
   }
   private replicaView(r: Replica): ReplicaView {
-    return { id: r.id, taskId: r.taskKey, workerId: r.workerId, state: r.state, output: r.output, fatal: r.fatal };
+    return { id: r.id, taskId: r.taskKey, workerId: r.workerId, state: r.state, output: r.output, fatal: r.fatal, aloneOk: r.aloneOk };
   }
   private workerView(w: Worker): WorkerView {
-    return { id: w.id, speedEma: w.speedEma, alpha: w.alpha, beta: w.beta };
+    // 9. hafta: itibar modülü (reputation.ts) gelene kadar hiçbir worker güvenilir sayılmaz.
+    return { id: w.id, speedEma: w.speedEma, alpha: w.alpha, beta: w.beta, trusted: false };
   }
 }

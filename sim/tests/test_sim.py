@@ -29,7 +29,7 @@ def cfg(**over) -> dict:
 def test_determinism_same_seed_identical_outputs(tmp_path):
     for d in ("a", "b"):
         run_main(["--seed", "7", "--out", str(tmp_path / d), "--set", "workload.n_dags=4", "--set", "faults.f=0.2"])
-    for f in ("summary.json", "jobs.parquet", "tasks.parquet", "replicas.parquet"):
+    for f in ("summary.json", "jobs.parquet", "tasks.parquet", "replicas.parquet", "rep_events.parquet"):
         assert (tmp_path / "a" / f).read_bytes() == (tmp_path / "b" / f).read_bytes(), f
 
 
@@ -170,12 +170,20 @@ def test_invalid_dags_rejected():
         validate_dag({"version": 0, "tasks": [{"id": "a", "module": "rm", "input": {}}]})
 
 
+def _coordinator_columns(table: str) -> list[str]:
+    ddl = (REPO_ROOT / "coordinator" / "src" / "db" / "db.ts").read_text(encoding="utf-8")
+    block = ddl.split(f"CREATE TABLE IF NOT EXISTS {table} (")[1].split(");")[0]
+    return [part.strip().split()[0] for part in block.replace("\n", " ").split(",") if part.strip()]
+
+
 def test_replica_columns_match_coordinator_schema():
     from vcsim.events import REPLICA_COLUMNS
-    ddl = (REPO_ROOT / "coordinator" / "src" / "db" / "db.ts").read_text(encoding="utf-8")
-    block = ddl.split("CREATE TABLE IF NOT EXISTS replicas (")[1].split(");")[0]
-    cols = [part.strip().split()[0] for part in block.replace("\n", " ").split(",") if part.strip()]
-    assert cols == REPLICA_COLUMNS
+    assert _coordinator_columns("replicas") == REPLICA_COLUMNS
+
+
+def test_rep_event_columns_match_coordinator_schema():
+    from vcsim.events import REP_EVENT_COLUMNS
+    assert _coordinator_columns("rep_events") == REP_EVENT_COLUMNS
 
 
 def test_reference_matches_readme_vectors():

@@ -25,6 +25,17 @@ test("parametre dosyası beklenen alanları ve kapsam dokümanındaki değerleri
   assert.equal(c.spotCheckRate, 0.1);
 });
 
+test("itibar test vektörleri parametre dosyasıyla aynı parametreleri kullanır", () => {
+  const v = read("test/reputation-vectors.json");
+  assert.deepEqual(v.params, read("config/default.json").reputation);
+  const kinds = new Set(["match", "mismatch", "spot_pass", "spot_fail"]);
+  assert.ok(v.cases.length > 0);
+  for (const c of v.cases) {
+    assert.ok(c.events.every((e) => kinds.has(e)), `${c.name}: bilinmeyen olay`);
+    for (const k of ["alpha", "beta", "R", "trusted"]) assert.ok(k in c.expect, `${c.name}: eksik ${k}`);
+  }
+});
+
 test("mesaj şeması: geçerli worker mesajları kabul, bozuklar ret", () => {
   assert.ok(msgSchema({ type: "hello", consent: true, deviceClass: "mobile" }));
   assert.ok(msgSchema({ type: "result", replicaId: 3, status: "ok", output: "{}", durationMs: 12.5, loadMs: 3, impl: "wasm" }));
