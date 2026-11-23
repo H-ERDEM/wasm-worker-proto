@@ -29,7 +29,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | Tarih | Karar | Gerekçe |
 |---|---|---|
 | 2026-11-05 | İtibar sayaçları `alpha`/`beta` olarak adlandırıldı | Hata modelindeki `f`, `s` ile çakışmayı önlemek için (rapor §0.2) |
-| 2026-11-05 | `maxReplicas = 5`; toplam deneme sınırı 15 | Uyuşmazlığın sonsuza kadar sürmemesi; sınıra ulaşan görev FAILED ve ayrı metrik (Kapsam v2 §5) |
+| 2026-11-05 | `maxReplicas = 5`; toplam deneme sınırı 15 *(2026-11-23'te 10'a çıkarıldı)* | Uyuşmazlığın sonsuza kadar sürmemesi; sınıra ulaşan görev FAILED ve ayrı metrik (Kapsam v2 §5) |
 | 2026-11-05 | Parametre dosyası YAML yerine JSON | Node ve Python ek bağımlılık olmadan okur |
 | 2026-11-05 | SQLite için `better-sqlite3` yerine Node'un yerleşik `node:sqlite` modülü | Derlenmesi gereken yerel bağımlılık yok |
 | 2026-11-05 | TypeScript derleme adımı yok; Node'un tip ayıklaması, `tsc --noEmit` ile kontrol | Daha az araç |
@@ -54,3 +54,5 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 2026-11-23 | Ödeme iş bitince (COMPLETED ya da FAILED) toplu: kabul edilmiş görevlerin kabul anında eşleşen kopyaları ve geçilen sınama işleri `paid = 1`. Simülatörde uygulandı; koordinatörde 9. hafta | Kapsam §8. İptal edilebilecek sonuç önceden ödenmiş sayılamaz. FAILED işte de kabul edilmiş görevlerin emeği ödenir |
 | 2026-11-23 | Zamanlayıcılar: ölçülmemiş worker'ın hızı boştakilerin en yüksek ölçülmüş hızı sayılır (yoksa 1); eşitlikte önce ölçülmemiş, sonra sıra. İtibar ağırlıklı puan `R × hız` | Yeni worker'lar denenir ve hızları ölçülür; aksi hâlde hiç seçilmeyebilirler |
 | 2026-11-23 | BOINC adaptive: N, `match`/`spot_pass` ile artar, `mismatch`/`spot_fail` ile sıfırlanır; 1/N kararı CRN (tohum, worker, görev) ile | Kapsam §5; ortak rastgele sayılarla eşleştirilmiş karşılaştırma |
+| 2026-11-23 | `maxReplicas = 10`; toplam deneme sınırı 30. "Bir görev FAILED → iş FAILED" kuralı korunur | 5 ile 50 görevli bir işin başarısız olma olasılığı f = %20'de %29, f = %30'da %79 (simülasyon: %30 ve %68); RQ1 maliyet ve makespan karşılaştırması stratejileri değil bu tavanı ölçerdi. 10 ile f = %30'da ≈ %0,7, f = %40'ta ≈ %8. Bedeli: alıcının peşin ödediği üst sınır iki katı (fark iade edilir) |
+| 2026-11-23 | WASM hatası (`fatal`) itibarı etkilemez; `replicas_error` olarak ayrıca raporlanır | Görevler belirlenimci: girdiden kaynaklanan panic her worker'da olur; tarayıcı kaynaklı hata (ör. telefonda bellek) dürüst worker'ı w = 5 ile cezalandırırdı. Hata döndüren worker ödeme ve itibar kazanmaz, sınamayı ayırt edemez. Gelecek çalışma: başkaları başarıyla çalıştırmışken hata verene hafif ceza |

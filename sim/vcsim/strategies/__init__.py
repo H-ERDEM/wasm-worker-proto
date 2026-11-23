@@ -93,7 +93,7 @@ class AcceptFirstVerifier:
 
 class FixedVerifier:
     """Sabit k kopya. Canlı kopyaların hepsi dönünce karar verilir: ≥ 2 eşleşen sonuç kabul,
-    yoksa bir kopya daha (üst sınırı koordinatör uygular: maxReplicas, toplam 15 deneme)."""
+    yoksa bir kopya daha (üst sınırı koordinatör uygular: maxReplicas, toplam deneme maxReplicas × 3)."""
 
     uses_spot_checks = False
 

@@ -5,7 +5,7 @@
   "heartbeatMs": 5000,
   "missedHeartbeats": 2,
   "taskTimeoutMs": 120000,
-  "maxReplicas": 5,
+  "maxReplicas": 10,
   "reputation": {
     "tau": 0.95,
     "alphaMin": 10,
