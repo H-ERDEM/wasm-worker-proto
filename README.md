@@ -157,7 +157,7 @@ Bkz. [`payments/x402-proto/README.md`](payments/x402-proto/README.md): Solana De
 | Alan | Tür | Açıklama |
 |---|---|---|
 | `taskId` | sayı | İstek–yanıt eşleştirme anahtarı |
-| `module` | metin | `"sha_chain"`, `"matmul"` (ve test için `"debug_panic"`) |
+| `module` | metin | `"sha_chain"`, `"matmul"`, `"image_blur"` (ve test için `"debug_panic"`) |
 | `input` | metin | Görevin JSON girdisi |
 | `impl` | metin, isteğe bağlı | `"wasm"` (varsayılan) veya `"js"` |
 
@@ -189,6 +189,13 @@ Rust tarafı `run_task(module, input_json)` olarak dışa aktarılır ve her gö
 - **Tanım:** A ve B (n×n, `u32`), `mulberry32` PRNG ile satır sırasıyla (önce A, sonra B) üretilir; `C = A·B mod 2^32`. Çıktı, C'nin satır sıralı, little-endian `u32` baytlarının SHA-256 özetidir.
 - **Çıktı:** `{"hash":"<hex>","n":<n>,"seed":<seed>}`
 
+### `image_blur` (8. hafta)
+
+- **Girdi:** `{"seed": <u32>, "w": 1..=1024, "h": 1..=1024, "passes": 1..=16}`
+- **Tanım:** w×h gri tonlu `u8` görüntü `mulberry32` ile satır sırasıyla üretilir (her piksel bir sonraki çekilişin en üst baytı). 3×3 kutu bulanıklaştırma `passes` kez uygulanır: her çıktı pikseli 3×3 komşuluğun toplamının 9'a tamsayı bölümüdür; kenarlarda koordinatlar sınıra kıstırılır (en yakın piksel). Kayan nokta yoktur.
+- **Çıktı:** `{"h":<h>,"hash":"<hex>","passes":<p>,"seed":<seed>,"w":<w>}`; özet, son görüntünün satır sıralı baytlarının SHA-256'sıdır.
+- **Maliyet:** `w·h·passes` (`shared/config` `costFunctions`).
+
 ## Belirlenimcilik ve test vektörleri
 
 Görevler yalnızca tamsayı ve bayt işlemleri kullanır. WebAssembly'de kayan nokta işlemlerinin NaN bit deseni belirsiz olabildiği için ([spesifikasyon notu](https://www.webassembly.org/docs/nondeterminism/)) kayan nokta bilinçli olarak dışarıda bırakılmıştır.
@@ -200,8 +207,9 @@ Sabit vektörler `vectors.js` içindedir; beklenen değerler Rust'tan bağımsı
 | `sha_chain` | `{"seed":"hello","iterations":1}` | `2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824` |
 | `sha_chain` | `{"seed":"hello","iterations":1000}` | `f6eec10c841b542f37ffb4ca00f82c5b6b4b11b79636d20201078b667ac37159` |
 | `matmul` | `{"seed":42,"n":64}` | `21bfb70784701c76d11da1401dec6eb95c570e074e7a831c5ac69a56514433cb` |
+| `image_blur` | `{"seed":42,"w":64,"h":48,"passes":3}` | `3894adbe0c4011c6f5b7e8e3c248b1275401d8082f8cb5be5483e3bc5b488863` |
 
-Sekiz vektörün tamamı Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir.
+İlk sekiz vektör (`sha_chain`, `matmul`) Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir. `image_blur`'un beş vektörü Rust (yerel derleme, `cargo test`), saf JS, `scripts/ref_vectors.py` ve simülatörün NumPy referansında aynıdır; tarayıcılarda WASM ile denetimi 8. haftanın sonunda yapılacak.
 
 ## Testler
 
@@ -272,7 +280,7 @@ Module worker desteği gerekir; güncel Chrome, Firefox ve Safari sürümleri de
 
 ```
 wasm-worker-proto/
-├── Cargo.toml, src/            # Rust görevleri: lib.rs, sha_chain.rs, matmul.rs
+├── Cargo.toml, src/            # Rust görevleri: lib.rs, sha_chain.rs, matmul.rs, image_blur.rs
 ├── index.html, main.js         # WASM prototip sayfası (vektör ve benchmark düğmeleri)
 ├── volunteer.html, volunteer.js  # gönüllü sayfası (koordinatöre bağlanır)
 ├── worker-client.js            # WorkerClient: iki sayfanın ortak worker yöneticisi

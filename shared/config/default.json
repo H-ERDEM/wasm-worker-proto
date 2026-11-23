@@ -17,6 +17,7 @@
   "costFunctions": {
     "sha_chain": "iterations",
     "matmul": "n^3",
+    "image_blur": "w*h*passes",
     "debug_panic": "1"
   }
 }

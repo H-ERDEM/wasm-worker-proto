@@ -27,6 +27,9 @@ assert.throws(() => run_task("sha_chain", '{"seed":"a","iterations":0}'), /itera
 assert.throws(() => run_task("matmul", '{"seed":1,"n":513}'), /n must be/);
 assert.throws(() => run_task("matmul", '{"seed":1,"n":2,"extra":1}'), /unknown field/);
 assert.throws(() => runJs("matmul", '{"seed":1,"n":513}'), /n must be/);
+assert.throws(() => run_task("image_blur", '{"seed":1,"w":4,"h":4,"passes":17}'), /passes must be/);
+assert.throws(() => run_task("image_blur", '{"seed":1,"w":0,"h":4,"passes":1}'), /w and h must be/);
+assert.throws(() => runJs("image_blur", '{"seed":1,"w":4,"h":1025,"passes":1}'), /w and h must be/);
 console.log("error-path checks OK");
 
 if (failed) {

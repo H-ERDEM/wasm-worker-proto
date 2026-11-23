@@ -232,3 +232,14 @@ await s.close();
     assert m["tasks_with_truth"] == 3
     assert m["task_error_rate"] == 0.0
     assert m["cost_per_job"] == pytest.approx(0.003)
+
+
+def test_reference_matches_image_blur_vectors():
+    """Simülatörün NumPy referansı vectors.js'teki (saf Python ile üretilmiş) image_blur vektörlerini verir."""
+    import re
+    src = (REPO_ROOT / "vectors.js").read_text(encoding="utf-8")
+    lit = r'("(?:[^"\\]|\\.)*")'  # kaçışlı tırnakları içeren JS/JSON dizgi değişmezi
+    pairs = re.findall(r'module: "image_blur",\s*input: ' + lit + r',\s*expected: ' + lit, src)
+    assert len(pairs) == 5
+    for inp, exp in pairs:
+        assert expected_output("image_blur", json.loads(inp)) == json.loads(exp)
