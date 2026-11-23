@@ -47,7 +47,7 @@ Aynı oturumda gözlenen hata yolları (ikisinde de kaynak verilmedi):
 | Platform adresinin USDC hesabı yok | 402 `invalid_exact_svm_recipient_ata_missing` |
 | Alıcının USDC'si yok (yetersiz bakiye) | 402 `invalid_exact_svm_transaction_simulation_failed` (facilitator transferi simüle eder; ayrıntılı neden vermez) |
 
-Yanlış ağ ve tutar üst sınırı istemci politikasının ağsız testleriyle denetlenir. Tekrarlanan ödeme başlığı Devnet'te henüz denenmedi; 9. haftada ara katman `POST /jobs` önüne konduğunda denenecek.
+Yanlış ağ ve tutar üst sınırı istemci politikasının ağsız testleriyle denetlenir. Tekrarlanan ödeme başlığı 9. haftada ödemeli koordinatörle denendi (aşağıda).
 
 **Hata yolları (kabul ölçütü):**
 
@@ -56,6 +56,32 @@ Yanlış ağ ve tutar üst sınırı istemci politikasının ağsız testleriyle
 | Yetersiz bakiye | Faucet'ten USDC almadan istemciyi çalıştırın | Kaynak verilmez (402 ya da hata) |
 | Yanlış ağ | `server.ts` içinde ağı mainnet yapın | İstemci politikası reddeder, ödeme yapılmaz |
 | Tekrarlanan ödeme | Aynı `PAYMENT-SIGNATURE` başlığını ikinci kez gönderin | Facilitator reddeder |
+
+### Ödemeli koordinatörle iş satın alma (9. hafta, 23 Kasım 2026)
+
+`PAYMENTS=1 npm run coordinator` + `npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay --max-usdc 0.1 --wait`; iki tarayıcı (Chrome ve Firefox, MacBook Air).
+
+| Alan | Değer |
+|---|---|
+| İş | `job_336a3fe8`, 7 görev (`image-pipeline.json`), doğrulayıcı `adaptive` |
+| Teklif (üst sınır) | 0,077778 USDC (77778 atomik birim) = 0,001 × 7 × 10 / 0,9 |
+| Ödeyen → alıcı | `FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF` → `8fG4mWUr2cMrcVrMRD1pSodKSffekd5a4Zj7EBm5XiiY` |
+| İşlem imzası | `5Un1D2TttGVC3seUtoJ9682XE4wqgG6W2emgQQYPdMWWzFrEn1nFXmYsctR2Y8q7P3CxLeQx4ET3oXUnXoLDHCXJ` |
+| Gezgin | <https://explorer.solana.com/tx/5Un1D2TttGVC3seUtoJ9682XE4wqgG6W2emgQQYPdMWWzFrEn1nFXmYsctR2Y8q7P3CxLeQx4ET3oXUnXoLDHCXJ?cluster=devnet> |
+| Sonuç | COMPLETED; 7 görevin her biri 2 kopya (yeni tarayıcılar henüz güvenilir değil) |
+| Emanet defteri | gerçekleşen maliyet 15000 (14 kopya + 1 geçilen sınama işi), iade edilecek 62778 atomik birim; zincir üstü iade 10. haftada |
+
+Gözlem: iş sırasında Mac uykuya geçince iki tarayıcı da koptu; çalışan görevler kuyruğa döndü ve tarayıcılar yeniden bağlanınca iş tamamlandı (gönüllü ayrılması senaryosu).
+
+Tekrar denemesi (`submit -- shared/examples/single-task.json --verifier adaptive --pay --max-usdc 0.1 --replay --wait`): `--replay` aynı imzalı ödeme başlığıyla aynı isteği ikinci kez gönderir.
+
+| Alan | Değer |
+|---|---|
+| İlk istek | `job_f8600908`, 1 görev, üst sınır 0,011112 USDC (11112), imza `62BcueiSrvZfQ3KvK3b1fGKmHk9hszSXcPUz9EZgNYYRDA7YaLTmdMFtdhB17cMhbchVdyemhnmWhQzWmSshYqik` |
+| Aynı başlıkla ikinci istek | **402** `invalid_exact_svm_transaction_simulation_failed`; ikinci iş oluşmadı |
+| Defter | gerçekleşen 2000 (2 kopya), iade edilecek 9112 |
+
+Ret nedeni "zaten işlendi" değil "simülasyon başarısız": işlem zincirde zaten yer aldığı için facilitator'ın yeniden simülasyonu başarısız oluyor. Sonuç aynı (para ikinci kez çekilmez, iş oluşmaz); ret kodu facilitator'a bağlı.
 
 ## Alıcı ödemesi kararı
 

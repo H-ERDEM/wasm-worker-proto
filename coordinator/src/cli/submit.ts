@@ -19,7 +19,7 @@ const query = new URLSearchParams(
 ).toString();
 const qs = query ? `?${query}` : "";
 if (!file) {
-  console.error("Kullanım: npm run submit -- <dag.json> [--url <adres>] [--wait] [--quote] [--pay [--max-usdc 1]]");
+  console.error("Kullanım: npm run submit -- <dag.json> [--url <adres>] [--wait] [--quote] [--pay [--max-usdc 1] [--replay]]");
   process.exit(2);
 }
 
@@ -40,6 +40,7 @@ console.log(`Teklif: ${q.quote.tasks} görev, doğrulayıcı ${q.quote.verifier}
 if (args.includes("--quote")) process.exit(0);
 
 let doFetch: typeof fetch = fetch;
+const recorded: { paid?: { headers: Headers; body: string } } = {};
 if (args.includes("--pay") && !q.payment) {
   console.log("Koordinatörde ödeme kapalı; --pay yok sayıldı.");
 } else if (args.includes("--pay")) {
@@ -69,7 +70,15 @@ if (args.includes("--pay") && !q.payment) {
   const signer = await createKeyPairSignerFromBytes(base58.decode(key));
   // Güvenlik politikası: yalnızca Devnet, yalnızca Devnet USDC, en fazla --max-usdc.
   const client = new x402Client().register("solana:*", new ExactSvmScheme(signer)).registerPolicy(devnetPolicyWithMax(maxAtomic));
-  doFetch = wrapFetchWithPayment(fetch, client);
+  // --replay için: ödeme başlığını taşıyan isteği (ikinci deneme) kaydet.
+  const recording: typeof fetch = async (input, init) => {
+    const req = new Request(input, init);
+    if (req.headers.has("payment-signature") || req.headers.has("x-payment")) {
+      recorded.paid = { headers: new Headers(req.headers), body: await req.clone().text() };
+    }
+    return fetch(req);
+  };
+  doFetch = wrapFetchWithPayment(recording, client);
   console.log(`Alıcı: ${signer.address}; bütçe ${maxUsdc} USDC`);
 }
 
@@ -87,6 +96,23 @@ console.log(`İş gönderildi: ${out.jobId}`);
 if (out.payment) {
   console.log(`Ödeme kesinleşti: ${out.payment.transaction} (ödeyen ${out.payment.payer})`);
   console.log(`  Gezgin: https://explorer.solana.com/tx/${out.payment.transaction}?cluster=devnet`);
+}
+
+// Tekrar koruması denemesi: aynı imzalı ödeme başlığıyla aynı isteği bir kez daha gönder.
+// Beklenen: ödeme zaten kesinleştiği için facilitator reddeder, ikinci iş oluşmaz.
+if (args.includes("--replay")) {
+  const paidRequest = recorded.paid;
+  if (!paidRequest) {
+    console.error("--replay: kaydedilmiş ödemeli istek yok (--pay ile birlikte kullanın).");
+  } else {
+    const again = await fetch(`${base}/jobs${qs}`, { method: "POST", headers: paidRequest.headers, body: paidRequest.body });
+    const body = (await again.json().catch(() => ({}))) as { jobId?: string; error?: string };
+    if (again.status === 201) {
+      console.error(`UYARI: aynı ödeme ikinci kez kabul edildi, yeni iş ${body.jobId}. Tekrar koruması çalışmadı.`);
+      process.exit(1);
+    }
+    console.log(`Tekrar denemesi: aynı ödeme başlığı reddedildi (${again.status})` + (body.error ? `: ${body.error}` : "") + "; ikinci iş oluşmadı.");
+  }
 }
 
 if (args.includes("--wait")) {
