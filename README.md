@@ -169,6 +169,8 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay 
 | `autostart=1` | Onay ekranını atlar; **yalnızca araştırmacının kendi cihazlarında** deney için |
 | `fault=random\|collude&s=0.2` | Deney modu: `s` olasılıkla kasıtlı yanlış sonuç (biçim gerçek çıktıyla aynı) |
 
+**On-off saldırgan (ara demo).** Worker kimliği tarayıcının `localStorage`'ında, itibarı koordinatörün veritabanında tutulur. Dürüst çalışıp tek kopya moduna geçmiş bir sekme aynı adreste `fault=random&s=1` ile yeniden açılırsa aynı kimlik ve itibarla hile yapmaya başlar: sonuçları tek kopyayla kabul edilir, ilk sınama işinde yakalanır ve bitmemiş işlerdeki tek kopyalı sonuçları geriye dönük iptal edilip yeniden hesaplanır (`test/volunteer-e2e.mjs`, "on-off saldırgan").
+
 ### Simülatör ve ortak analiz
 
 ```bash
@@ -362,7 +364,7 @@ wasm-worker-proto/
 ## Sınırlılıklar ve yol haritası
 
 - ~~Koordinatör, WebSocket bağlantısı, DAG ve çoklu worker~~ → 7. haftada eklendi.
-- Doğrulama şimdilik yalnızca `accept_first` (güvensiz karşılaştırma tabanı); replikasyon, itibar ve sınama işi 8–9. haftalarda eklenecek. Deney modundaki test, bu doğrulayıcının yanlış sonucu kabul ettiğini gösteriyor.
+- ~~Doğrulama yalnızca `accept_first`~~ → 8–9. haftalarda replikasyon, itibar, sınama işi ve geriye dönük iptal eklendi.
 - Modüller şimdilik tek WASM paketine gömülü. Hedef: koordinatörün `.wasm` modüllerini özetleriyle sunması, worker'ın yüklemeden önce doğrulaması (DAG v0'daki `moduleHash` alanı bunun için ayrıldı).
 - Simülatördeki `base_rate` ve oturum süresi değerleri yer tutucudur; pilot tarayıcı ölçümleriyle (`durationMs`, `loadMs`) kalibre edilecek.
 - x402 prototipi ağ gerektirmeyen testlerle doğrulandı; Devnet'te gerçek ödeme elle yapılacak.
