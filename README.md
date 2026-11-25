@@ -219,6 +219,12 @@ MCP Inspector (resmî test aracı; araçları tarayıcıda elle çağırır):
 npm run mcp-inspector     # http://127.0.0.1:6274 açılır; "Connect" → Tools → List Tools
 ```
 
+**Harici istemci denemeleri (25 Kasım 2026, ödemesiz koordinatör, iki gönüllü tarayıcı: Firefox + Chrome).**
+- *MCP Inspector v2.13.0:* beş araç listelendi; `get_quote` → `submit_workflow` → `get_result` ile `job_83bfe3eb` (three-task-dag, adaptive) tamamlandı: 3/3 görev kabul, 1 sınama işi.
+- *Claude masaüstü:* doğal dil isteğiyle ("modülleri listele, teklif al, işi gönder, sonucu getir") Claude araçları kendisi sırayla çağırdı; `job_1f2cfc32` (3 görev, adaptive) 3,4 sn'de tamamlandı, her görev 2 eşleşen kopyayla doğrulandı, teklif üst sınırı 0,033334 USDC.
+
+![MCP Inspector: get_result sonucu](docs/img/mcp-inspector.png)
+
 Claude masaüstü x402 ödemesini kendisi yapmaz: `get_quote`, `get_status`, `get_result` ve ödemesiz koordinatörde `submit_workflow` kullanılabilir; ödemeli akış `mcp-agent` (ve 11. haftadaki ajan) ile gösterilir.
 
 ### Gönüllü sayfası URL parametreleri
