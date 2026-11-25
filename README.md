@@ -198,13 +198,25 @@ npm run -s mcp                                        # stdio MCP sunucusu (COOR
 npm run mcp-agent -- shared/examples/image-pipeline.json --verifier adaptive --max-usdc 0.1   # uçtan uca örnek ajan (Devnet)
 ```
 
-Claude masaüstü uygulaması (`claude_desktop_config.json`), yollar kendi bilgisayarınıza göre:
+**Harici istemciler.** Claude masaüstü uygulaması için yapılandırmayı bu bilgisayarın yollarıyla yazdırın ve Claude → Ayarlar → Geliştirici → "Yapılandırmayı düzenle" ile açılan `claude_desktop_config.json` dosyasına ekleyin (dosyada başka `mcpServers` varsa yalnızca `"gonullu-hesaplama"` girdisini ekleyin); ardından uygulamayı tamamen kapatıp açın:
+
+```bash
+npm run -s mcp-config     # node'un tam yolunu kullanır; Claude masaüstü terminalin PATH'ini (nvm, Homebrew) görmez
+```
+
+Çıktının biçimi:
 
 ```json
 { "mcpServers": { "gonullu-hesaplama": {
-    "command": "node",
+    "command": "/…/bin/node",
     "args": ["--disable-warning=ExperimentalWarning", "/Users/<kullanıcı>/wasm-worker-proto/coordinator/src/mcp/stdio.ts"],
     "env": { "COORDINATOR_URL": "http://127.0.0.1:8787" } } } }
+```
+
+MCP Inspector (resmî test aracı; araçları tarayıcıda elle çağırır):
+
+```bash
+npm run mcp-inspector     # http://127.0.0.1:6274 açılır; "Connect" → Tools → List Tools
 ```
 
 Claude masaüstü x402 ödemesini kendisi yapmaz: `get_quote`, `get_status`, `get_result` ve ödemesiz koordinatörde `submit_workflow` kullanılabilir; ödemeli akış `mcp-agent` (ve 11. haftadaki ajan) ile gösterilir.

@@ -8,7 +8,9 @@
     "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/stdio.ts",
-    "mcp-agent": "node --disable-warning=ExperimentalWarning src/cli/mcp-agent.ts"
+    "mcp-agent": "node --disable-warning=ExperimentalWarning src/cli/mcp-agent.ts",
+    "mcp-config": "node src/cli/mcp-config.ts",
+    "mcp-inspector": "npx -y @modelcontextprotocol/inspector -e COORDINATOR_URL=${COORDINATOR_URL:-http://127.0.0.1:8787} -- node --disable-warning=ExperimentalWarning src/mcp/stdio.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
