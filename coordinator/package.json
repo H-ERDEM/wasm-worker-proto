@@ -6,16 +6,23 @@
     "start": "node --disable-warning=ExperimentalWarning src/index.ts",
     "submit": "node src/cli/submit.ts",
     "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mcp": "node --disable-warning=ExperimentalWarning src/mcp/stdio.ts",
+    "mcp-agent": "node --disable-warning=ExperimentalWarning src/cli/mcp-agent.ts",
+    "mcp-config": "node src/cli/mcp-config.ts",
+    "mcp-inspector": "npx -y @modelcontextprotocol/inspector -e COORDINATOR_URL=${COORDINATOR_URL:-http://127.0.0.1:8787} -- node --disable-warning=ExperimentalWarning src/mcp/stdio.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@scure/base": "^2.4.0",
+    "@solana-program/token": "^0.16.1",
     "@solana/kit": "^8.6.0",
     "@x402/core": "^2.30.0",
     "@x402/fetch": "^2.30.0",
     "@x402/svm": "^2.30.0",
     "ajv": "^8.17.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

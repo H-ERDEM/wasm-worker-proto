@@ -6,6 +6,7 @@
 //   impl=wasm|js                    varsayılan wasm; js yalnızca test/karşılaştırma için
 //   autostart=1                     onay ekranını atlar; YALNIZCA araştırmacının kendi cihazlarında deney için
 //   cpu=low|medium|high             CPU kullanım düzeyi
+//   wallet=<Solana adresi>          ödeme adresi (onay ekranındaki alanla aynı; Devnet)
 //   fault=random|collude&s=0.2      DENEY MODU: s olasılıkla kasıtlı yanlış sonuç (f/s deneyleri, 11. hafta)
 
 import { WorkerClient } from "./worker-client.js";
@@ -55,9 +56,10 @@ async function maybeCorrupt(module, input, result) {
 // ---------- Bağlantı ----------
 
 class Volunteer {
-  constructor({ cooldownMs, chargingOnly }) {
+  constructor({ cooldownMs, chargingOnly, wallet }) {
     this.cooldownMs = cooldownMs;
     this.chargingOnly = chargingOnly;
+    this.wallet = wallet;
     this.client = new WorkerClient();
     this.done = 0;
     this.backoffMs = 1000;
@@ -96,6 +98,7 @@ class Volunteer {
       const hello = { type: "hello", consent: true, userAgent: navigator.userAgent.slice(0, 512), deviceClass: deviceClass(), impls: [cfg.impl] };
       const id = storageGet("vc.workerId");
       if (id) hello.workerId = id;
+      if (this.wallet) hello.wallet = this.wallet;
       this.send(hello);
     };
     ws.onmessage = (e) => this.onMessage(JSON.parse(e.data));
@@ -183,10 +186,23 @@ const ui = {
   state: (text) => ($("state").textContent = text),
 };
 
+// Solana adresi: base58, 32–44 karakter (şemadaki desenle aynı).
+const WALLET_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+$("wallet").value = params.get("wallet") ?? storageGet("vc.wallet") ?? "";
+
 let volunteer = null;
 function begin() {
   const level = params.get("cpu") ?? $("cpu").value;
-  volunteer = new Volunteer({ cooldownMs: COOLDOWN_MS[level] ?? COOLDOWN_MS.medium, chargingOnly: $("chargingOnly").checked });
+  const wallet = $("wallet").value.trim();
+  if (wallet && !WALLET_RE.test(wallet)) {
+    $("walletHint").textContent = "Bu bir Solana adresine benzemiyor (base58, 32–44 karakter). Düzeltin ya da boş bırakın.";
+    $("walletHint").className = "err";
+    if (params.get("autostart") !== "1") return;
+  }
+  const valid = WALLET_RE.test(wallet) ? wallet : null;
+  if (valid) storageSet("vc.wallet", valid);
+  volunteer = new Volunteer({ cooldownMs: COOLDOWN_MS[level] ?? COOLDOWN_MS.medium, chargingOnly: $("chargingOnly").checked, wallet: valid });
+  ui.set("walletShown", valid ? `${valid.slice(0, 4)}…${valid.slice(-4)} (Devnet)` : "yok (ödeme yapılmaz)");
   $("consent").hidden = true;
   $("panel").hidden = false;
   volunteer.start();

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -51,7 +52,7 @@ if (args.includes("--pay") && !q.payment) {
     process.exit(1);
   }
   try {
-    process.loadEnvFile(new URL("../../../payments/x402-proto/.env", import.meta.url).pathname);
+    process.loadEnvFile(fileURLToPath(new URL("../../../payments/x402-proto/.env", import.meta.url)));
   } catch {
     /* .env yoksa ortam değişkenleri doğrudan kullanılır */
   }

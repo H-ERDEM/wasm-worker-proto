@@ -32,6 +32,16 @@ CREATE TABLE IF NOT EXISTS rep_events (
   id INTEGER PRIMARY KEY, worker_id TEXT NOT NULL, replica_id INTEGER,
   kind TEXT NOT NULL, alpha_after REAL, beta_after REAL, t INTEGER
 );
+-- 10. hafta: worker ödemeleri ve alıcı iadesi. (job_id, kind, payee) tekildir: aynı iş iki kez ödenmez.
+-- payee: worker kimliği ya da iade için 'payer'. status: pending | no_wallet | sent | confirmed | failed.
+-- tx_signature yayınlamadan ÖNCE yazılır (çökmeden sonra aynı işlemin durumu sorgulanır, yeniden imzalanmaz).
+CREATE TABLE IF NOT EXISTS payouts (
+  id INTEGER PRIMARY KEY, job_id TEXT NOT NULL, kind TEXT NOT NULL, payee TEXT NOT NULL,
+  recipient TEXT, units INTEGER, amount_atomic INTEGER NOT NULL, status TEXT NOT NULL,
+  tx_signature TEXT, blockhash TEXT, last_valid_height INTEGER, attempts INTEGER DEFAULT 0, error TEXT,
+  created_at INTEGER, updated_at INTEGER,
+  UNIQUE (job_id, kind, payee)
+);
 CREATE TABLE IF NOT EXISTS log (
   t INTEGER, level TEXT, event TEXT, detail TEXT
 );
@@ -77,6 +87,11 @@ export class Db {
       const { id, first_seen: _f, ...rest } = row;
       this.update("workers", id, rest);
     } else this.insert("workers", row);
+  }
+
+  /** Değiştirilen satır sayısını döndürür (INSERT OR IGNORE ile tekillik denetimi için). */
+  run(sql: string, ...params: (string | number | null)[]): number {
+    return Number(this.raw.prepare(sql).run(...params).changes);
   }
 
   all(sql: string, ...params: (string | number)[]): Row[] {

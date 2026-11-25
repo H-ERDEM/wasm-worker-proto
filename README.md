@@ -104,6 +104,8 @@ Tarayıcıda `http://127.0.0.1:8787` adresini açın, **Katılıyorum, başlat**
 | Yöntem | Yol | Açıklama |
 |---|---|---|
 | `POST` | `/quote` | DAG v0 için fiyat teklifi (üst sınır); iş oluşturmaz, ödeme istemez |
+| `GET` | `/panel`, `/examples`, `/events`, `/demo/info` | Demo paneli ve beslediği uç noktalar (örnek DAG'ler, olay kaydı) |
+| `POST` | `/demo/buy` | Panel alıcısı: x402 ile öder ve iş gönderir; yalnızca aynı makineden |
 | `POST` | `/jobs` | DAG v0 gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`; ödeme açıksa ödemesiz istek `402`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first` (varsayılan `shared/config`) |
 | `GET` | `/jobs/:id` | İş durumu, stratejiler, görev durumları, kabul edilen çıktılar, sınama işi sayısı |
 | `GET` | `/workers` | Bağlı worker'lar: hız, α, β, itibar R, güvenilir mi, `flagged` (sınamada en az bir kez yakalanmış; yalnızca izleme, kara liste yok) |
@@ -157,6 +159,68 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay 
 
 `--pay` alıcı anahtarını (`BUYER_PRIVATE_KEY`) kullanır; `--replay` ödemeden sonra aynı ödeme başlığını bir kez daha gönderip reddedildiğini gösterir; istemci politikası yalnızca Devnet, yalnızca Devnet USDC ve en fazla `--max-usdc` (varsayılan 1) öder.
 
+### Worker ödemeleri ve iade (10. hafta)
+
+Ödenmiş bir iş **kesinleşince** (bitti ve ona yansıtılan sınama işlerinin hepsi sonuçlandı) koordinatör bir ödeme planı çıkarır ve `payouts` tablosuna yazar (`coordinator/src/payouts.ts`):
+
+- her worker'a, kabul anında eşleşen kopyaları ve geçtiği sınama işleri kadar birim ücret (0,001 USDC);
+- alıcıya üst sınır − gerçekleşen maliyet (iade). Kalemlerin toplamı ödenen üst sınıra eşittir.
+
+Worker gönüllü sayfasındaki "Ödeme adresi" alanına (ya da `?wallet=`) bir Solana Devnet adresi girerse ödemesi oraya yapılır; adres yoksa kalem `no_wallet` olarak kalır. Ödemesiz işlerde plan çıkarılmaz.
+
+`PAYOUTS=1` ile plan Devnet'e gönderilir: platform cüzdanından **tek işlemde** toplu USDC transferi (alıcının token hesabı yoksa açılır; `coordinator/src/solana-chain.ts`). İade işleminin imzası `jobs.refund_tx`'e, tüm ödemeler `GET /jobs/:id` → `payment.payouts`'a ve panelin emanet defterine yansır.
+
+Çift ödemeye karşı: (iş, tür, alıcı) tekil; işlem imzası yayından **önce** kaydedilir ve yeniden başlatmada aynı imza sorgulanır; yalnızca zincire hiç girmediği kesinleşen (blok karması süresi dolmuş) ya da zincirde hata veren işlem yeniden imzalanır (en fazla 3 deneme).
+
+```bash
+HOST=0.0.0.0 PAYMENTS=1 PAYOUTS=1 npm run coordinator   # PLATFORM_PRIVATE_KEY .env'de
+```
+
+Platform adresinde işlem ücreti ve yeni token hesabı kirası için biraz **Devnet SOL** gerekir (https://faucet.solana.com). RPC varsayılanı `https://api.devnet.solana.com` (`RPC_URL` ile değişir).
+
+### MCP sunucusu: platform dış ajanlara açık (10. hafta)
+
+`coordinator/src/mcp/server.ts`, HTTP API'nin üstünde ince bir MCP adaptörüdür; koordinatöre yeni mantık eklemez.
+
+| Araç | Ne yapar |
+|---|---|
+| `list_modules` | WASM modülleri, özetleri, örnek DAG'ler ve DAG biçimi |
+| `get_quote` | DAG + strateji için üst sınır (USDC); iş oluşturmaz |
+| `submit_workflow` | İşi gönderir; **ücretli** (x402) |
+| `get_status` | Görev sayıları, süre, defter ve worker ödemeleri |
+| `get_result` | İş bitince çıktılar ve doğrulama bilgisi; **MCP Tasks** (`taskSupport: optional`; görev isteği olmadan çağrılırsa bekler) |
+
+Ödeme x402 v2'nin MCP taşımasıyla yapılır: ödemesiz `submit_workflow` çağrısı `isError: true` ve `structuredContent` = PaymentRequired döner; istemci aynı çağrıyı `params._meta["x402/payment"]` = PaymentPayload ile tekrarlar; başarıda kesinleşme bilgisi `_meta["x402/payment-response"]`'tadır. Adaptör ödeme yükünü `PAYMENT-SIGNATURE` başlığı olarak `POST /jobs`'a iletir; DAG doğrulaması, üst sınır + iade, tekrar koruması HTTP yoluyla aynıdır.
+
+```bash
+PAYMENTS=1 npm run coordinator                        # ayrı terminalde
+npm run -s mcp                                        # stdio MCP sunucusu (COORDINATOR_URL, varsayılan :8787)
+npm run mcp-agent -- shared/examples/image-pipeline.json --verifier adaptive --max-usdc 0.1   # uçtan uca örnek ajan (Devnet)
+```
+
+**Harici istemciler.** Claude masaüstü uygulaması için yapılandırmayı bu bilgisayarın yollarıyla yazdırın ve Claude → Ayarlar → Geliştirici → "Yapılandırmayı düzenle" ile açılan `claude_desktop_config.json` dosyasına ekleyin (dosyada başka `mcpServers` varsa yalnızca `"gonullu-hesaplama"` girdisini ekleyin); ardından uygulamayı tamamen kapatıp açın:
+
+```bash
+npm run -s mcp-config     # node'un tam yolunu kullanır; Claude masaüstü terminalin PATH'ini (nvm, Homebrew) görmez
+```
+
+Çıktının biçimi:
+
+```json
+{ "mcpServers": { "gonullu-hesaplama": {
+    "command": "/…/bin/node",
+    "args": ["--disable-warning=ExperimentalWarning", "/Users/<kullanıcı>/wasm-worker-proto/coordinator/src/mcp/stdio.ts"],
+    "env": { "COORDINATOR_URL": "http://127.0.0.1:8787" } } } }
+```
+
+MCP Inspector (resmî test aracı; araçları tarayıcıda elle çağırır):
+
+```bash
+npm run mcp-inspector     # http://127.0.0.1:6274 açılır; "Connect" → Tools → List Tools
+```
+
+Claude masaüstü x402 ödemesini kendisi yapmaz: `get_quote`, `get_status`, `get_result` ve ödemesiz koordinatörde `submit_workflow` kullanılabilir; ödemeli akış `mcp-agent` (ve 11. haftadaki ajan) ile gösterilir.
+
 ### Gönüllü sayfası URL parametreleri
 
 | Parametre | Açıklama |
@@ -165,7 +229,10 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay 
 | `cpu=low\|medium\|high` | Görevler arası 5 sn / 1 sn / 0 ara |
 | `impl=js` | WASM yerine saf JS (karşılaştırma ve WASM'siz test için) |
 | `autostart=1` | Onay ekranını atlar; **yalnızca araştırmacının kendi cihazlarında** deney için |
+| `wallet=<adres>` | Ödeme adresi (Solana Devnet); onay ekranındaki alanla aynı |
 | `fault=random\|collude&s=0.2` | Deney modu: `s` olasılıkla kasıtlı yanlış sonuç (biçim gerçek çıktıyla aynı) |
+
+**On-off saldırgan (ara demo).** Worker kimliği tarayıcının `localStorage`'ında, itibarı koordinatörün veritabanında tutulur. Dürüst çalışıp tek kopya moduna geçmiş bir sekme aynı adreste `fault=random&s=1` ile yeniden açılırsa aynı kimlik ve itibarla hile yapmaya başlar: sonuçları tek kopyayla kabul edilir, ilk sınama işinde yakalanır ve bitmemiş işlerdeki tek kopyalı sonuçları geriye dönük iptal edilip yeniden hesaplanır (`test/volunteer-e2e.mjs`, "on-off saldırgan").
 
 ### Simülatör ve ortak analiz
 
@@ -177,6 +244,21 @@ python -m vcsim.analyze ../experiments/data/sim/default-s1 ../coordinator/coordi
 ```
 
 `vcsim.analyze`, simülatör çıktısı ile koordinatörün SQLite kaydını **aynı metrik koduyla** okur: makespan, iş başına maliyet, görev ve iş düzeyinde hatalı sonuç oranı, kayıp ve zaman aşımı sayıları. Koordinatör kaydındaki doğru sonuç Python referansıyla hesaplanır.
+
+### Demo paneli (ara demo)
+
+Terminal yerine tek ekranda canlı demo: koordinatör çalışırken **http://127.0.0.1:8787/panel** adresini açın.
+
+- **Alıcı:** örnek DAG (`shared/examples/`, ara demo için `demo-40.json`, 40 görev) ve doğrulama stratejisi seçilir; "Teklif al" üst sınırı formülüyle gösterir, "Öde ve gönder" x402 ödemesini yapar ve adımları sırayla gösterir: 402 → imza → zincirde kesinleşme (Solana gezgini bağlantısıyla).
+- **İş:** görev grafiği canlı; her görevin durumu ve kaç eşleşen kopyayla (ya da tek kopyayla) kabul edildiği. Altında kabul, tek kopya, eşleşen kopya ve sınama sayaçları; iş bitince emanet defteri (ödenen, gerçekleşen, iade edilecek).
+- **Tarayıcılar:** bağlı her tarayıcı (Chrome · Mac, Chrome · Android …), o anki görevi ya da sınama işi, itibar çubuğu (τ çizgisiyle), "tek kopya" ve "yakalandı" rozetleri.
+- **Olaylar:** koordinatörün kaydından (`GET /events`): bağlanma, ödeme, sınama, uyuşmazlık, tek kopya moduna geçiş, geriye dönük iptal, iş sonu.
+
+Ödeme `PAYMENTS=1` ile açılır. Alıcı anahtarı (`BUYER_PRIVATE_KEY`) yalnızca koordinatörün çalıştığı makinedeki `.env`'de kalır; panel ödemeyi `POST /demo/buy` üzerinden ister ve bu uç nokta yalnızca aynı makineden gelen isteği kabul eder (`coordinator/src/api/demo-buyer.ts`). Telefonun bağlanabilmesi için `HOST=0.0.0.0` verilirse panelin üstünde gönüllü sayfasının yerel ağ adresi görünür.
+
+```bash
+HOST=0.0.0.0 PAYMENTS=1 npm run coordinator     # sonra tarayıcıda /panel
+```
 
 ### Görsel simülasyon (ara demo)
 
@@ -345,7 +427,7 @@ wasm-worker-proto/
 ## Sınırlılıklar ve yol haritası
 
 - ~~Koordinatör, WebSocket bağlantısı, DAG ve çoklu worker~~ → 7. haftada eklendi.
-- Doğrulama şimdilik yalnızca `accept_first` (güvensiz karşılaştırma tabanı); replikasyon, itibar ve sınama işi 8–9. haftalarda eklenecek. Deney modundaki test, bu doğrulayıcının yanlış sonucu kabul ettiğini gösteriyor.
+- ~~Doğrulama yalnızca `accept_first`~~ → 8–9. haftalarda replikasyon, itibar, sınama işi ve geriye dönük iptal eklendi.
 - Modüller şimdilik tek WASM paketine gömülü. Hedef: koordinatörün `.wasm` modüllerini özetleriyle sunması, worker'ın yüklemeden önce doğrulaması (DAG v0'daki `moduleHash` alanı bunun için ayrıldı).
 - Simülatördeki `base_rate` ve oturum süresi değerleri yer tutucudur; pilot tarayıcı ölçümleriyle (`durationMs`, `loadMs`) kalibre edilecek.
 - x402 prototipi ağ gerektirmeyen testlerle doğrulandı; Devnet'te gerçek ödeme elle yapılacak.

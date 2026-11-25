@@ -12,6 +12,7 @@ import type { Config } from "../src/config.ts";
 import { formatUsdc } from "../src/coordinator.ts";
 import { jsOracle } from "../src/oracle.ts";
 import { createServer } from "../src/server.ts";
+import type { PayingFetchFactory } from "../src/api/demo-buyer.ts";
 import { startFakeWorker } from "./fake-worker.ts";
 
 const PAY_TO = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
@@ -189,6 +190,173 @@ test("ödeme kapalıyken (varsayılan) POST /jobs eskisi gibi ödemesiz çalış
     const q = (await (await fetch(`${s.url}/quote`, { method: "POST", body: JSON.stringify(dag(1)) })).json()) as { payment: unknown };
     assert.equal(q.payment, null);
   } finally {
+    await s.close();
+  }
+});
+
+// ---------- Demo paneli (ara demo): alıcı ve izleme uç noktaları ----------
+
+/** Gerçek Devnet imzası yerine sahte işlemle ödeme başlığı üreten "ödemeli fetch" (x402 akışı aynı). */
+const fakePaying = (tx: string): PayingFetchFactory => async (maxAtomic) => (f) => async (input, init) => {
+  const req0 = new Request(input, init);
+  const body = await req0.clone().text();
+  const res = await f(req0);
+  if (res.status !== 402) return res;
+  const pr = decodePaymentRequiredHeader(res.headers.get("PAYMENT-REQUIRED")!);
+  if (BigInt(pr.accepts[0].amount) > maxAtomic) throw new Error("bütçe aşıldı: ödeme yapılmadı");
+  const h = new Headers(req0.headers);
+  h.set("PAYMENT-SIGNATURE", encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted: pr.accepts[0], payload: { transaction: tx } }));
+  return f(new Request(req0.url, { method: "POST", headers: h, body }));
+};
+
+async function withDemo(fn: (s: Server) => Promise<void>, tx = "TX_DEMO") {
+  const s = await createServer({
+    config: FAST, oracle: jsOracle, payments: { payTo: PAY_TO, facilitatorUrl: fUrl },
+    demoBuyer: { payingFetch: fakePaying(tx), address: BUYER },
+  });
+  try {
+    await fn(s);
+  } finally {
+    await s.close();
+  }
+}
+
+const demoBuy = (s: Server, body: unknown, q: string) =>
+  fetch(`${s.url}/demo/buy${q}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+test("demo alıcısı: 402 → imza → kesinleşme adımları kaydedilir, iş oluşur ve defter yazılır", () =>
+  withDemo(async (s) => {
+    const info = (await (await fetch(`${s.url}/demo/info`)).json()) as { buyer: string; buyerAvailable: boolean; payment: { payTo: string } };
+    assert.equal(info.buyer, BUYER);
+    assert.equal(info.buyerAvailable, true);
+    assert.equal(info.payment.payTo, PAY_TO);
+    const res = await demoBuy(s, dag(3), "?verifier=adaptive&maxUsdc=0.1");
+    assert.equal(res.status, 201);
+    const out = (await res.json()) as { ok: boolean; jobId: string; transaction: string; steps: { kind: string; detail: Record<string, unknown> }[] };
+    assert.equal(out.ok, true);
+    assert.deepEqual(out.steps.map((x) => x.kind), ["request", "payment_required", "signed", "settled"]);
+    assert.equal(out.steps[1].detail.amountAtomic, Math.ceil((1000 * 3 * 10) / 0.9));
+    assert.equal(out.transaction, "SIG_TX_DEMO");
+    const job = s.coord.getJob(out.jobId)!;
+    assert.equal(job.verifier, "adaptive");
+    assert.equal(job.payment!.transaction, "SIG_TX_DEMO");
+  }));
+
+test("demo alıcısı: üst sınır bütçeyi aşarsa ödeme yapılmaz, iş oluşmaz", () =>
+  withDemo(async (s) => {
+    const res = await demoBuy(s, dag(7), "?verifier=adaptive&maxUsdc=0.01");
+    assert.equal(res.status, 402);
+    const out = (await res.json()) as { ok: boolean; error: string; steps: { kind: string }[] };
+    assert.equal(out.ok, false);
+    assert.match(out.error, /bütçe/);
+    assert.deepEqual(out.steps.map((x) => x.kind), ["request", "payment_required"]);
+    assert.equal(s.db.all("SELECT COUNT(*) AS n FROM jobs")[0].n, 0);
+  }, "TX_BUDGET"));
+
+test("demo alıcısı kapalıyken 409; geçersiz DAG ödeme istenmeden 400", async () => {
+  await withPaid(async (s) => {
+    assert.equal((await demoBuy(s, dag(1), "")).status, 409);
+    const info = (await (await fetch(`${s.url}/demo/info`)).json()) as { buyer: string | null; buyerAvailable: boolean };
+    assert.deepEqual([info.buyer, info.buyerAvailable], [null, false]);
+  });
+  await withDemo(async (s) => {
+    const res = await demoBuy(s, { version: 0, tasks: [] }, "");
+    const out = (await res.json()) as { steps: { kind: string }[] };
+    assert.equal(res.status, 400);
+    assert.deepEqual(out.steps.map((x) => x.kind), ["request"]);
+  }, "TX_BAD");
+});
+
+test("panel uç noktaları: örnek DAG'ler, olay kaydı, panel sayfası; worker ve görev ayrıntıları", () =>
+  withDemo(async (s) => {
+    const list = (await (await fetch(`${s.url}/examples`)).json()) as { name: string; tasks: number }[];
+    assert.deepEqual(list.find((e) => e.name === "image-pipeline"), { name: "image-pipeline", jobId: "ornek-goruntu-hatti", tasks: 7 });
+    const ex = (await (await fetch(`${s.url}/examples/image-pipeline`)).json()) as { tasks: unknown[] };
+    assert.equal(ex.tasks.length, 7);
+    assert.equal((await fetch(`${s.url}/examples/yok`)).status, 404);
+    assert.equal((await fetch(`${s.url}/examples/..%2Fconfig`)).status, 404);
+    const panel = await fetch(`${s.url}/panel`);
+    assert.equal(panel.status, 200);
+    assert.match(await panel.text(), /<title>/);
+
+    const w = startFakeWorker(s.wsUrl);
+    try {
+      await w.id;
+      const out = (await (await demoBuy(s, dag(2), "?verifier=accept_first")).json()) as { jobId: string };
+      const end = Date.now() + 10000;
+      while (s.coord.getJob(out.jobId)!.status === "RUNNING" && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+      const job = s.coord.getJob(out.jobId)!;
+      // accept_first: tek kopyayla kabul
+      assert.deepEqual(job.tasks.map((t) => [t.deps, t.agreeing, t.single]), [[[], 1, true], [[], 1, true]]);
+      const [wk] = s.coord.listWorkers();
+      assert.equal(typeof wk.deviceClass, "string");
+      assert.equal(wk.doing, null);
+      const ev = (await (await fetch(`${s.url}/events`)).json()) as { id: number; event: string }[];
+      const names = ev.map((e) => e.event);
+      for (const n of ["worker_connected", "job_paid", "job_finished"]) assert.ok(names.includes(n), n);
+      const later = (await (await fetch(`${s.url}/events?since=${ev.at(-1)!.id}`)).json()) as unknown[];
+      assert.equal(later.length, 0);
+    } finally {
+      w.close();
+    }
+  }, "TX_PANEL"));
+
+// ---------- 10.1: iş kesinleşince worker ödemeleri ve iade ----------
+
+test("ödenmiş iş kesinleşince plan: worker başına doğrulanmış kopya × birim, alıcıya iade; toplam = üst sınır; zincire gönderilir", async () => {
+  const sent: { to: string; amountAtomic: number }[][] = [];
+  const chain = {
+    async sign(transfers: { to: string; amountAtomic: number }[]) {
+      sent.push(transfers);
+      return { signature: `SIG${sent.length}`, blockhash: "BH", lastValidBlockHeight: 1, send: async () => {} };
+    },
+    async status() { return { status: "confirmed" as const }; },
+  };
+  const s = await createServer({ config: FAST, oracle: jsOracle, payments: { payTo: PAY_TO, facilitatorUrl: fUrl }, payouts: { chain, pollMs: 1 } });
+  const WA = "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF", WB = "8fG4mWUr2cMrcVrMRD1pSodKSffekd5a4Zj7EBm5XiiY";
+  const w1 = startFakeWorker(s.wsUrl, { wallet: WA }), w2 = startFakeWorker(s.wsUrl, { wallet: WB });
+  try {
+    const [id1, id2] = await Promise.all([w1.id, w2.id]);
+    assert.equal(s.coord.listWorkers().find((w) => w.id === id1)!.wallet, WA);
+    const sig = await payHeader(s, dag(3), "?verifier=fixed2", "TX_PAYOUT");
+    const out = (await (await postJobs(s, dag(3), "?verifier=fixed2", { "PAYMENT-SIGNATURE": sig })).json()) as { jobId: string };
+    const end = Date.now() + 10000;
+    let job: { payment?: { payouts?: { kind: string; payee: string; amountAtomic: number; status: string; units: number | null }[]; refundTransaction?: string | null } } = {};
+    while (Date.now() < end) {
+      job = (await (await fetch(`${s.url}/jobs/${out.jobId}`)).json()) as typeof job;
+      if (job.payment?.payouts?.length && job.payment.payouts.every((p) => p.status === "confirmed")) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const p = job.payment!.payouts!;
+    // fixed2, 3 görev, 2 worker: her worker 3 doğrulanmış kopya → 3000; iade 30 000 − 6000 = 24 000
+    assert.deepEqual(p.map((x) => [x.kind, x.payee, x.units, x.amountAtomic, x.status]).sort(), [
+      ["refund", "payer", null, 24000, "confirmed"],
+      ["worker", id1, 3, 3000, "confirmed"],
+      ["worker", id2, 3, 3000, "confirmed"],
+    ].sort());
+    assert.equal(p.reduce((n, x) => n + x.amountAtomic, 0), 30000, "toplam = ödenen üst sınır");
+    assert.equal(job.payment!.refundTransaction, "SIG1");
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].map((t) => t.to).sort(), [WA, WB, BUYER].sort());
+  } finally {
+    w1.close();
+    w2.close();
+    await s.close();
+  }
+});
+
+test("ödemesiz işte (ödeme kapalı) worker ödeme planı çıkarılmaz", async () => {
+  const s = await createServer({ config: FAST, oracle: jsOracle });
+  const w = startFakeWorker(s.wsUrl, { wallet: "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF" });
+  try {
+    await w.id;
+    const { jobId } = s.coord.submitJob(dag(2), { verifier: "accept_first" });
+    const end = Date.now() + 10000;
+    while (s.coord.getJob(jobId)!.status === "RUNNING" && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(s.db.all("SELECT COUNT(*) AS n FROM payouts")[0].n, 0);
+    assert.equal(s.payouts, null);
+  } finally {
+    w.close();
     await s.close();
   }
 });

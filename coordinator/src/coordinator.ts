@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { PlanEntry } from "./payouts.ts";
 import type { Config } from "./config.ts";
 import { Db } from "./db/db.ts";
 import { moduleRegistry, type ModuleInfo } from "./modules.ts";
@@ -32,6 +33,11 @@ interface Worker {
   speedEma: number | null;
   alpha: number;
   beta: number;
+  /** hello mesajından (demo paneli ve kayıt için). */
+  userAgent: string | null;
+  deviceClass: string;
+  /** Ödeme adresi (Solana, Devnet); hello'da verilmezse veritabanındaki son adres. */
+  wallet: string | null;
 }
 
 interface Task {
@@ -134,6 +140,11 @@ export interface CoordinatorOptions {
   oracle?: Oracle;
   /** [0, 1) rastgele sayı üreteci (testlerde belirlenimci yapılabilir). */
   random?: () => number;
+  /**
+   * Ödenmiş bir iş kesinleşince (bitti ve geç sınama işleri de sonuçlandı) çağrılır; ödeme planı
+   * payoutPlan(jobId) ile alınır (10. hafta, payouts.ts). Ödemesiz işlerde çağrılmaz.
+   */
+  onSettled?: (jobId: string) => void;
 }
 
 /** Kayıp ya da zaman aşımı nedeniyle yeniden oluşturulan kopyalar için toplam üst sınır çarpanı. */
@@ -171,6 +182,9 @@ export class Coordinator {
   private timer: NodeJS.Timeout | null = null;
   private lastPingAt = 0;
   private readonly random: () => number;
+  onSettled: ((jobId: string) => void) | null;
+  /** Ödeme planı çıkarılmış işler (bir kez). */
+  private readonly settled = new Set<string>();
 
   constructor(cfg: Config, db: Db, opts: CoordinatorOptions = {}) {
     this.cfg = cfg;
@@ -180,6 +194,7 @@ export class Coordinator {
     this.rep = validateParams(cfg.reputation);
     this.oracle = opts.oracle ?? jsOracle;
     this.random = opts.random ?? Math.random;
+    this.onSettled = opts.onSettled ?? null;
     this.scheduler = Coordinator.schedulerNamed(cfg.scheduler);
     this.verifier = Coordinator.verifierNamed(cfg.verifier);
     const maxId = db.all("SELECT MAX(id) AS m FROM replicas")[0]?.m;
@@ -302,6 +317,10 @@ export class Coordinator {
           state: t.state,
           output: t.acceptedOutput ? JSON.parse(t.acceptedOutput) : null,
           replicas: t.replicaIds.length,
+          deps: t.def.deps ?? [],
+          /** Kabulde eşleşen kopya sayısı; tek kopyayla kabul edildiyse 1 ve `single` dolu. */
+          agreeing: t.payIds.length,
+          single: t.acceptedSingleBy !== null,
         };
       }),
     };
@@ -311,31 +330,37 @@ export class Coordinator {
   listWorkers() {
     return [...this.workers.values()].map((w) => {
       const spotFails = Number(this.db.all("SELECT COUNT(*) AS n FROM rep_events WHERE worker_id = ? AND kind = 'spot_fail'", w.id)[0]?.n ?? 0);
+      const r = w.busyReplica !== null ? this.replicas.get(w.busyReplica) : undefined;
+      const t = r && !r.spot ? this.tasks.get(r.taskKey) : undefined;
       return {
         id: w.id, busy: w.busyReplica !== null, available: w.available, speedEma: w.speedEma, lastSeen: w.lastSeen,
         alpha: w.alpha, beta: w.beta, reputation: score(w.alpha, w.beta), trusted: isTrusted(w.alpha, w.beta, this.rep),
-        flagged: spotFails > 0,
+        flagged: spotFails > 0, caught: spotFails, userAgent: w.userAgent, deviceClass: w.deviceClass, wallet: w.wallet,
+        // Koordinatörün görüşü (demo paneli): şu an hangi işin hangi görevi, ya da sınama işi.
+        doing: r ? (r.spot ? { spot: true, jobId: r.spot.jobId } : { spot: false, jobId: t?.jobId ?? null, task: t?.def.id ?? null, module: t?.def.module ?? null }) : null,
       };
     });
   }
 
   // ---------- Worker yaşam döngüsü ----------
 
-  workerConnected(conn: WorkerConn, hello: { workerId?: string; userAgent?: string; deviceClass?: string }): string {
+  workerConnected(conn: WorkerConn, hello: { workerId?: string; userAgent?: string; deviceClass?: string; wallet?: string }): string {
     let id = hello.workerId;
     if (!id || this.workers.has(id)) id = `w_${randomUUID().slice(0, 8)}`;
     const now = Date.now();
-    const stored = this.db.all("SELECT alpha, beta, speed_ema FROM workers WHERE id = ?", id)[0];
+    const stored = this.db.all("SELECT alpha, beta, speed_ema, wallet FROM workers WHERE id = ?", id)[0];
     const w: Worker = {
       id, conn, lastSeen: now, busyReplica: null, available: true,
       speedEma: (stored?.speed_ema as number | null) ?? null,
       alpha: (stored?.alpha as number) ?? 0,
       beta: (stored?.beta as number) ?? 0,
+      userAgent: hello.userAgent ?? null, deviceClass: hello.deviceClass ?? "unknown",
+      wallet: hello.wallet ?? (stored?.wallet as string | null) ?? null,
     };
     this.workers.set(id, w);
     this.db.upsertWorker({
       id, user_agent: hello.userAgent ?? null, device_class: hello.deviceClass ?? "unknown",
-      first_seen: now, last_seen: now,
+      first_seen: now, last_seen: now, wallet: w.wallet,
     });
     this.db.log("info", "worker_connected", { id });
     conn.send({ type: "welcome", workerId: id, heartbeatMs: this.cfg.heartbeatMs, modules: this.modules });
@@ -461,7 +486,12 @@ export class Coordinator {
     r.state = state;
     this.db.update("replicas", r.id, { state });
     this.db.log("warn", state === "LOST" ? "replica_lost" : "replica_timed_out", { replicaId: r.id, workerId: r.workerId });
-    if (r.spot) return; // kaybolan sınama işi yenilenmez; itibar olayı üretmez
+    if (r.spot) {
+      // Kaybolan sınama işi yenilenmez ve itibar olayı üretmez; iş bitmişse defter artık kesinleşebilir.
+      const job = this.jobs.get(r.spot.jobId);
+      if (job) this.maybeSettle(job);
+      return;
+    }
     const task = this.tasks.get(r.taskKey)!;
     if (task.state !== "READY" && task.state !== "RUNNING") return;
     if (task.replicaIds.length >= this.cfg.maxReplicas * ATTEMPT_FACTOR) {
@@ -586,6 +616,45 @@ export class Coordinator {
     const refund = typeof cap === "number" ? Math.max(0, cap - realized) : null;
     this.db.update("jobs", job.id, { realized_cost: realized, refund_due: refund });
     if (typeof cap === "number" && realized > cap) this.db.log("error", "cost_exceeds_cap", { jobId: job.id, cap, realized });
+    this.maybeSettle(job);
+  }
+
+  /**
+   * İş bitti ve ona yansıtılan sınama işlerinin hiçbiri artık çalışmıyorsa defter kesinleşir: geç dönen
+   * sınama işi maliyeti değiştiremez. Ödenmiş işlerde ödeme planı (worker'lar + iade) bir kez çıkarılır.
+   */
+  private maybeSettle(job: Job): void {
+    if (job.state === "RUNNING" || this.settled.has(job.id)) return;
+    if (job.spotIds.some((id) => this.replicas.get(id)?.state === "ASSIGNED")) return;
+    this.settled.add(job.id);
+    const paid = this.db.all("SELECT payer FROM jobs WHERE id = ?", job.id)[0]?.payer;
+    if (paid) this.onSettled?.(job.id);
+  }
+
+  /**
+   * Kesinleşmiş işin ödeme planı: her worker'a, kabul anında eşleşen kopyaları ve geçtiği sınama işleri
+   * kadar birim ücret (adresi yoksa recipient = null); alıcıya üst sınır − gerçekleşen maliyet.
+   * Tutarların toplamı ödenen üst sınıra eşittir.
+   */
+  payoutPlan(jobId: string): PlanEntry[] {
+    const job = this.jobs.get(jobId);
+    const j = this.db.all("SELECT payer, quote_cap, refund_due FROM jobs WHERE id = ?", jobId)[0];
+    if (!job || !j?.payer) return [];
+    const units = new Map<string, number>();
+    const add = (w: unknown) => units.set(String(w), (units.get(String(w)) ?? 0) + 1);
+    for (const r of this.db.all("SELECT r.worker_id FROM replicas r JOIN tasks t ON t.id = r.task_id WHERE t.job_id = ? AND r.paid = 1", jobId)) add(r.worker_id);
+    for (const id of job.spotIds) {
+      const r = this.db.all("SELECT worker_id, paid FROM replicas WHERE id = ?", id)[0];
+      if (Number(r?.paid) === 1) add(r.worker_id);
+    }
+    const entries: PlanEntry[] = [];
+    for (const [workerId, n] of [...units].sort(([a], [b]) => a.localeCompare(b))) {
+      const wallet = this.workers.get(workerId)?.wallet ?? (this.db.all("SELECT wallet FROM workers WHERE id = ?", workerId)[0]?.wallet as string | null) ?? null;
+      entries.push({ kind: "worker", payee: workerId, recipient: wallet, units: n, amountAtomic: n * this.unitPriceAtomic });
+    }
+    const refund = Number(j.refund_due ?? 0);
+    if (refund > 0) entries.push({ kind: "refund", payee: "payer", recipient: String(j.payer), units: null, amountAtomic: refund });
+    return entries;
   }
 
   private ledger(jobId: string) {
@@ -605,10 +674,15 @@ export class Coordinator {
     const stored = w ? null : this.db.all("SELECT alpha, beta FROM workers WHERE id = ?", workerId)[0];
     let alpha = w ? w.alpha : Number(stored?.alpha ?? 0);
     let beta = w ? w.beta : Number(stored?.beta ?? 0);
+    const wasTrusted = isTrusted(alpha, beta, this.rep);
     [alpha, beta] = update(alpha, beta, kind, this.rep);
     if (w) [w.alpha, w.beta] = [alpha, beta];
     this.db.update("workers", workerId, { alpha, beta });
     this.db.insert("rep_events", { worker_id: workerId, replica_id: replicaId, kind, alpha_after: alpha, beta_after: beta, t: Date.now() });
+    // Olay kaydı (demo paneli ve izleme): uyuşmazlık ve tek kopya moduna giriş/çıkış.
+    if (kind === "mismatch") this.db.log("warn", "result_mismatch", { workerId, replicaId });
+    const trusted = isTrusted(alpha, beta, this.rep);
+    if (trusted !== wasTrusted) this.db.log("info", trusted ? "worker_trusted" : "worker_untrusted", { workerId, reputation: score(alpha, beta) });
   }
 
   // ---------- Sınama işi ve geriye dönük iptal ----------
@@ -654,7 +728,12 @@ export class Coordinator {
   }
 
   private spotResult(workerId: string, r: Replica): void {
-    if (r.state !== "RETURNED_OK") return; // WASM hatası yanlış sonuç değildir; itibar olayı üretmez
+    if (r.state !== "RETURNED_OK") {
+      // WASM hatası yanlış sonuç değildir; itibar olayı üretmez. İş bitmişse defter kesinleşebilir.
+      const j = this.jobs.get(r.spot!.jobId);
+      if (j) this.maybeSettle(j);
+      return;
+    }
     const passed = this.spotPassed(r);
     this.observe(workerId, r.id, passed ? "spot_pass" : "spot_fail");
     const job = this.jobs.get(r.spot!.jobId);
@@ -666,6 +745,7 @@ export class Coordinator {
       this.stats.spotFails++;
       this.db.log("warn", "spotcheck_failed", { replicaId: r.id, workerId });
       this.retroactiveCancel(workerId);
+      if (job) this.maybeSettle(job);
     }
   }
 

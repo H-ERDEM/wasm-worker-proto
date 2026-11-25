@@ -317,3 +317,63 @@ test("adaptive: sınama işi gerçek görevden ayırt edilemez; hileli tarayıc�
   }
 });
 
+
+test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı aynı kimlikle hile moduna alınır; sınamada yakalanır, tek kopyalı sonuçları geriye dönük iptal edilip yeniden hesaplanır", async () => {
+  // Ara demo senaryosu. 1) Isınma: sabit 2'li ile her sonuç eşleşmeyle doğrulanır, üç tarayıcı da güven kazanır.
+  // 2) Üçüncü tarayıcı aynı sekmede (aynı workerId, itibarı koordinatörde) fault=random&s=1 ile yeniden açılır.
+  // 3) Uyarlanabilir işte güvenilir olduğu için sonuçları tek kopyayla kabul edilir; birkaç sonuçtan sonra
+  //    sınama işleri açılır ve ilk sınamada yakalanır → geriye dönük iptal → doğru sonuçlarla tamamlanır.
+  let db = null, liar = null, phase2 = 0, armed = false;
+  const liarDone = () => Number(db?.all("SELECT COUNT(*) AS n FROM replicas WHERE worker_id = ? AND state = 'RETURNED_OK' AND id > ?", liar ?? "", phase2)[0]?.n ?? 0);
+  const caught = () => Number(db?.all("SELECT COUNT(*) AS n FROM rep_events WHERE kind = 'spot_fail'")[0]?.n ?? 0) > 0;
+  const random = () => (armed && !caught() && liarDone() >= 4 ? 0 : 0.99);
+  const t = await setup({}, { random });
+  db = t.s.db;
+  try {
+    await t.openWorker();
+    await t.openWorker();
+    await t.waitWorkers(2);
+    const page = await t.openWorker();
+    liar = (await t.waitWorkers(3)).at(-1).id;
+    const warm = await t.waitJob(t.submit(indep(60, "isinma"), { verifier: "fixed2" }), 60000);
+    assert.equal(warm.status, "COMPLETED");
+    assert.ok(t.s.coord.listWorkers().every((w) => w.trusted), "ısınmadan sonra üç tarayıcı da güvenilir");
+
+    await page.goto(`${t.s.url}/volunteer.html?impl=${IMPL}&autostart=1&cpu=high&fault=random&s=1`);
+    const end = Date.now() + 10000;
+    while (!(t.s.coord.listWorkers().length === 3 && t.s.coord.listWorkers().some((w) => w.id === liar))) {
+      if (Date.now() > end) throw new Error("hileli tarayıcı aynı kimlikle yeniden bağlanmadı");
+      await sleep(20);
+    }
+    assert.equal(t.s.coord.listWorkers().find((w) => w.id === liar).trusted, true, "itibarı koordinatörde korunur");
+
+    phase2 = Number(db.all("SELECT MAX(id) AS m FROM replicas")[0].m);
+    armed = true;
+    const jobId = t.submit(indep(40, "onoff"), { verifier: "adaptive" });
+    const job = await t.waitJob(jobId, 60000);
+    assert.equal(job.status, "COMPLETED");
+    assert.ok(correct(t, jobId), "iptal ve yeniden hesaplamadan sonra kabul edilen tüm sonuçlar doğru");
+    const of = (name) => db.all("SELECT detail FROM log WHERE event = ?", name).map((e) => JSON.parse(e.detail));
+    assert.ok(of("spotcheck_failed").some((d) => d.workerId === liar), "sınama işinde yakalanır");
+    const cancels = of("retroactive_cancel").filter((d) => d.workerId === liar && d.jobId === jobId);
+    assert.ok(cancels.length > 0 && cancels[0].tasks.length > 0, "tek kopyalı sonuçları geriye dönük iptal edilir");
+    assert.equal(t.s.coord.listWorkers().find((w) => w.id === liar).trusted, false, "güveni düşer");
+  } finally {
+    await t.teardown();
+  }
+});
+
+test("ödeme adresi: geçerli Solana adresi hello'da gider ve saklanır; geçersiz adres yok sayılır", async () => {
+  const t = await setup();
+  try {
+    const good = "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF";
+    const page = await t.openWorker(`autostart=1&cpu=high&wallet=${good}`);
+    await t.openWorker("autostart=1&cpu=high&wallet=0xdeadbeef");
+    const ws = await t.waitWorkers(2);
+    assert.deepEqual(ws.map((w) => w.wallet).sort(), [good, null].sort());
+    await page.waitForFunction(() => document.getElementById("walletShown").textContent.startsWith("FKqF"));
+    assert.equal(t.s.db.all("SELECT COUNT(*) AS n FROM workers WHERE wallet = ?", good)[0].n, 1);
+  } finally {
+    await t.teardown();
+  }
+});

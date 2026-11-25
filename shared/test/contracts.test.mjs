@@ -44,6 +44,8 @@ test("mesaj şeması: geçerli worker mesajları kabul, bozuklar ret", () => {
   assert.ok(msgSchema({ type: "status", available: false }));
   assert.ok(!msgSchema({ type: "status" }), "available zorunlu");
   assert.ok(!msgSchema({ type: "hello", consent: false }), "onaysız hello reddedilmeli");
+  assert.ok(msgSchema({ type: "hello", consent: true, wallet: "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF" }), "cüzdan adresi isteğe bağlı");
+  assert.ok(!msgSchema({ type: "hello", consent: true, wallet: "0xabc" }), "base58 olmayan adres reddedilmeli");
   assert.ok(!msgSchema({ type: "result", replicaId: "x", status: "ok", output: "", durationMs: 1 }));
   assert.ok(!msgSchema({ type: "assign" }), "worker assign gönderemez");
 });

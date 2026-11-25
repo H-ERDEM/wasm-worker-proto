@@ -1,10 +1,11 @@
 // Kullanım: npm run server -w payments/x402-proto   (.env içinde PLATFORM_ADDRESS gerekir)
+import { fileURLToPath } from "node:url";
 import { appendFileSync } from "node:fs";
 import { DEFAULT_FACILITATOR_URL, requireEnv } from "./config.ts";
 import { createApp } from "./server.ts";
 
 try {
-  process.loadEnvFile(new URL("../.env", import.meta.url).pathname);
+  process.loadEnvFile(fileURLToPath(new URL("../.env", import.meta.url)));
 } catch {
   /* .env yoksa ortam değişkenleri doğrudan kullanılır */
 }
