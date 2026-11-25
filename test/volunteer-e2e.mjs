@@ -326,7 +326,10 @@ test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı
   let db = null, liar = null, phase2 = 0, armed = false;
   const liarDone = () => Number(db?.all("SELECT COUNT(*) AS n FROM replicas WHERE worker_id = ? AND state = 'RETURNED_OK' AND id > ?", liar ?? "", phase2)[0]?.n ?? 0);
   const caught = () => Number(db?.all("SELECT COUNT(*) AS n FROM rep_events WHERE kind = 'spot_fail'")[0]?.n ?? 0) > 0;
-  const random = () => (armed && !caught() && liarDone() >= 4 ? 0 : 0.99);
+  // Sınama, hileli tarayıcı 2 tek kopyalı sonuç verdikten sonra açılır; iş (60 görev) bu sırada bitmemiş olmalı,
+  // yoksa yakalanma geç kalır (late_detection) ve bitmiş işteki sonuçlar geri alınamaz. Yavaş CI makinesinde
+  // 4 sonuç / 40 görev bu payı bırakmıyordu.
+  const random = () => (armed && !caught() && liarDone() >= 2 ? 0 : 0.99);
   const t = await setup({}, { random });
   db = t.s.db;
   try {
@@ -349,7 +352,7 @@ test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı
 
     phase2 = Number(db.all("SELECT MAX(id) AS m FROM replicas")[0].m);
     armed = true;
-    const jobId = t.submit(indep(40, "onoff"), { verifier: "adaptive" });
+    const jobId = t.submit(indep(60, "onoff"), { verifier: "adaptive" });
     const job = await t.waitJob(jobId, 60000);
     assert.equal(job.status, "COMPLETED");
     assert.ok(correct(t, jobId), "iptal ve yeniden hesaplamadan sonra kabul edilen tüm sonuçlar doğru");
