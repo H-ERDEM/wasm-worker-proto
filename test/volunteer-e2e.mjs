@@ -326,7 +326,10 @@ test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı
   let db = null, liar = null, phase2 = 0, armed = false;
   const liarDone = () => Number(db?.all("SELECT COUNT(*) AS n FROM replicas WHERE worker_id = ? AND state = 'RETURNED_OK' AND id > ?", liar ?? "", phase2)[0]?.n ?? 0);
   const caught = () => Number(db?.all("SELECT COUNT(*) AS n FROM rep_events WHERE kind = 'spot_fail'")[0]?.n ?? 0) > 0;
-  const random = () => (armed && !caught() && liarDone() >= 4 ? 0 : 0.99);
+  // Sınama, hileli tarayıcı 2 tek kopyalı sonuç verdikten sonra açılır; iş (60 görev) bu sırada bitmemiş olmalı,
+  // yoksa yakalanma geç kalır (late_detection) ve bitmiş işteki sonuçlar geri alınamaz. Yavaş CI makinesinde
+  // 4 sonuç / 40 görev bu payı bırakmıyordu.
+  const random = () => (armed && !caught() && liarDone() >= 2 ? 0 : 0.99);
   const t = await setup({}, { random });
   db = t.s.db;
   try {
@@ -349,9 +352,17 @@ test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı
 
     phase2 = Number(db.all("SELECT MAX(id) AS m FROM replicas")[0].m);
     armed = true;
-    const jobId = t.submit(indep(40, "onoff"), { verifier: "adaptive" });
+    const jobId = t.submit(indep(60, "onoff"), { verifier: "adaptive" });
     const job = await t.waitJob(jobId, 60000);
     assert.equal(job.status, "COMPLETED");
+    if (!correct(t, jobId)) {
+      // Tanı: yanlış kabul edilen görevler, kopyaları ve ilgili olaylar (CI'da yeniden üretilemeyen durumlar için).
+      const wrong = db.all("SELECT id AS key, accepted_output, input_resolved, module FROM tasks WHERE job_id = ?", jobId)
+        .filter((r) => r.accepted_output !== runJs(r.module, r.input_resolved)).map((r) => r.key);
+      console.log("# yanlış kabul:", JSON.stringify(wrong), "hileli:", liar);
+      for (const k of wrong) console.log("#  ", k, JSON.stringify(db.all("SELECT id, worker_id, is_spotcheck, state, created_at, returned_at, substr(output,10,12) AS o FROM replicas WHERE task_id = ?", k)));
+      console.log("# olaylar:", JSON.stringify(db.all("SELECT t, event, detail FROM log WHERE event NOT IN ('task_assigned') ORDER BY rowid DESC LIMIT 40")));
+    }
     assert.ok(correct(t, jobId), "iptal ve yeniden hesaplamadan sonra kabul edilen tüm sonuçlar doğru");
     const of = (name) => db.all("SELECT detail FROM log WHERE event = ?", name).map((e) => JSON.parse(e.detail));
     assert.ok(of("spotcheck_failed").some((d) => d.workerId === liar), "sınama işinde yakalanır");
