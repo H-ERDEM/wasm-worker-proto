@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { DEFAULT_FACILITATOR_URL } from "../../payments/x402-proto/src/config.ts";
 import { createServer } from "./server.ts";
 import { devnetPayingFetch } from "./api/demo-buyer.ts";
@@ -11,7 +12,7 @@ import { DEVNET_USDC_MINT } from "../../payments/x402-proto/src/config.ts";
 const paymentsOn = process.env.PAYMENTS === "1";
 if (paymentsOn) {
   try {
-    process.loadEnvFile(new URL("../../payments/x402-proto/.env", import.meta.url).pathname);
+    process.loadEnvFile(fileURLToPath(new URL("../../payments/x402-proto/.env", import.meta.url)));
   } catch {
     /* .env yoksa ortam değişkenleri doğrudan kullanılır */
   }

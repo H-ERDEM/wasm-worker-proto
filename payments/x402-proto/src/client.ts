@@ -1,5 +1,6 @@
 // Alıcı istemci: 402'yi yakalar, Devnet USDC ödemesini imzalar, isteği yineler.
 // Kullanım: npm run client -w payments/x402-proto   (.env içinde BUYER_PRIVATE_KEY gerekir)
+import { fileURLToPath } from "node:url";
 import { base58 } from "@scure/base";
 import { createKeyPairSignerFromBytes } from "@solana/kit";
 import { decodePaymentResponseHeader, wrapFetchWithPayment, x402Client } from "@x402/fetch";
@@ -7,7 +8,7 @@ import { ExactSvmScheme } from "@x402/svm/exact/client";
 import { devnetPolicy, requireEnv } from "./config.ts";
 
 try {
-  process.loadEnvFile(new URL("../.env", import.meta.url).pathname);
+  process.loadEnvFile(fileURLToPath(new URL("../.env", import.meta.url)));
 } catch {
   /* .env yoksa ortam değişkenleri doğrudan kullanılır */
 }

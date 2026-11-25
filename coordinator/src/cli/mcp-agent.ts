@@ -28,7 +28,7 @@ const maxAtomic = Math.round(maxUsdc * 1e6);
 const coordinatorUrl = process.env.COORDINATOR_URL ?? "http://127.0.0.1:8787";
 
 try {
-  process.loadEnvFile(new URL("../../../payments/x402-proto/.env", import.meta.url).pathname);
+  process.loadEnvFile(fileURLToPath(new URL("../../../payments/x402-proto/.env", import.meta.url)));
 } catch {
   /* .env yoksa ortam değişkenleri doğrudan kullanılır */
 }
