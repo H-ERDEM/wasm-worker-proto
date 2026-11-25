@@ -355,6 +355,14 @@ test("on-off saldırgan: dürüst çalışıp tek kopya moduna geçen tarayıcı
     const jobId = t.submit(indep(60, "onoff"), { verifier: "adaptive" });
     const job = await t.waitJob(jobId, 60000);
     assert.equal(job.status, "COMPLETED");
+    if (!correct(t, jobId)) {
+      // Tanı: yanlış kabul edilen görevler, kopyaları ve ilgili olaylar (CI'da yeniden üretilemeyen durumlar için).
+      const wrong = db.all("SELECT id AS key, accepted_output, input_resolved, module FROM tasks WHERE job_id = ?", jobId)
+        .filter((r) => r.accepted_output !== runJs(r.module, r.input_resolved)).map((r) => r.key);
+      console.log("# yanlış kabul:", JSON.stringify(wrong), "hileli:", liar);
+      for (const k of wrong) console.log("#  ", k, JSON.stringify(db.all("SELECT id, worker_id, is_spotcheck, state, created_at, returned_at, substr(output,10,12) AS o FROM replicas WHERE task_id = ?", k)));
+      console.log("# olaylar:", JSON.stringify(db.all("SELECT t, event, detail FROM log WHERE event NOT IN ('task_assigned') ORDER BY rowid DESC LIMIT 40")));
+    }
     assert.ok(correct(t, jobId), "iptal ve yeniden hesaplamadan sonra kabul edilen tüm sonuçlar doğru");
     const of = (name) => db.all("SELECT detail FROM log WHERE event = ?", name).map((e) => JSON.parse(e.detail));
     assert.ok(of("spotcheck_failed").some((d) => d.workerId === liar), "sınama işinde yakalanır");
