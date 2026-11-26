@@ -16,7 +16,7 @@ const valued = new Set(["--url", "--scheduler", "--verifier", "--max-usdc"].map(
 const file = args.find((a, i) => !a.startsWith("--") && !valued.has(i));
 const base = flag("--url") ?? process.env.COORDINATOR_URL ?? "http://127.0.0.1:8787";
 const query = new URLSearchParams(
-  Object.entries({ scheduler: flag("--scheduler"), verifier: flag("--verifier") }).filter(([, v]) => v) as [string, string][],
+  Object.entries({ scheduler: flag("--scheduler"), verifier: flag("--verifier"), source: "cli" }).filter(([, v]) => v) as [string, string][],
 ).toString();
 const qs = query ? `?${query}` : "";
 if (!file) {

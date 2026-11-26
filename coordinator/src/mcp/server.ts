@@ -55,8 +55,9 @@ const strategyShape = {
   scheduler: z.enum(SCHEDULERS).optional().describe("Zamanlama: fifo, fastest, reputation. Varsayılan: koordinatörünki"),
 };
 
-function query(args: { verifier?: string; scheduler?: string }): string {
+function query(args: { verifier?: string; scheduler?: string }, source?: string): string {
   const q = new URLSearchParams();
+  if (source) q.set("source", source);
   if (args.scheduler) q.set("scheduler", args.scheduler);
   if (args.verifier) q.set("verifier", args.verifier);
   return q.size ? `?${q}` : "";
@@ -165,7 +166,7 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
         return fail(`geçersiz ödeme yükü: ${(e as Error).message}`);
       }
     }
-    const r = await fetch(`${base}/jobs${query(args)}`, { method: "POST", headers, body: JSON.stringify(args.dag) });
+    const r = await fetch(`${base}/jobs${query(args, "mcp")}`, { method: "POST", headers, body: JSON.stringify(args.dag) });
     if (r.status === 402) {
       // Ödeme gerekli ya da geçersiz: PaymentRequired (neden `error` alanında) yapılandırılmış içerik olarak.
       const raw = r.headers.get("payment-required");

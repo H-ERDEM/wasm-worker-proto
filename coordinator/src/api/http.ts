@@ -118,6 +118,7 @@ export function httpHandler(coord: Coordinator, payments: JobPayments | null = n
           const v = url.searchParams.get(k);
           if (v) q.set(k, v);
         }
+        q.set("source", "panel");
         const maxUsdc = Number(url.searchParams.get("maxUsdc") ?? 1);
         if (!(maxUsdc > 0)) return send(res, 400, { error: "geçersiz bütçe" });
         const r = await demo.buyer.buy(dag, q.size ? `?${q}` : "", BigInt(Math.round(maxUsdc * 1e6)));
