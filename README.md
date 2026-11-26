@@ -176,6 +176,10 @@ npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay 
 HOST=0.0.0.0 PAYMENTS=1 PAYOUTS=1 npm run coordinator   # PLATFORM_PRIVATE_KEY .env'de; platform adresinde biraz Devnet SOL gerekir
 ```
 
+**Devnet kaydı (26 Kasım 2026).** `job_84adbcea` (CLI) ve `job_22616c0d` (MCP üzerinden `mcp-agent`): her iş için iki worker ödemesi ve alıcı iadesi tek işlemde zincirde kesinleşti (`3HdPcv1G…`, `3qLUkWhz…`). İkinci işte iki tarayıcı da güvenilir olduğundan bazı görevler tek kopyayla kabul edildi; gerçekleşen maliyet 0,016'dan 0,011 USDC'ye düştü. Ayrıntılar ve gezgin bağlantıları: [`payments/x402-proto/README.md`](payments/x402-proto/README.md).
+
+![Devnet: worker ödemeleri ve iade tek işlemde](docs/img/devnet-payout.png)
+
 ## MCP sunucusu
 
 `coordinator/src/mcp/server.ts`, HTTP API'nin üstünde ince bir MCP adaptörüdür; koordinatöre yeni mantık eklemez. stdio ile ayrı süreç olarak çalışır.
