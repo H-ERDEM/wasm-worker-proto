@@ -10,6 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { createMcpServer } from "./server.ts";
 
 const baseUrl = process.env.COORDINATOR_URL ?? "http://127.0.0.1:8787";
-const server = createMcpServer({ baseUrl });
+// Araç çağrıları stderr'e yazılır: terminalde görünür, Claude masaüstü sunucu günlüğüne kaydeder.
+const server = createMcpServer({ baseUrl, log: (line) => console.error(`${new Date().toISOString()} ${line}`) });
 await server.connect(new StdioServerTransport());
 console.error(`MCP sunucusu hazır (stdio) → koordinatör ${baseUrl}`);
