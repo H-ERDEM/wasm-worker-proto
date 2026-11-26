@@ -35,7 +35,7 @@ Gönüllüler bir web sayfasını açıp onay vererek bilgisayarlarının ya da 
 - **Stratejiler:** zamanlayıcılar `fifo`, `fastest`, `reputation`; doğrulayıcılar `accept_first`, `fixed2`, `fixed3`, `adaptive`. Koordinatör ve simülatör aynı ortak senaryoları geçer.
 - **İtibar ve sınama:** Beta itibar modeli; güvenilir worker'ın sonucu tek kopyayla kabul edilir, sınama işinde yakalanan worker'ın bitmemiş işlerdeki tek kopyalı sonuçları geriye dönük iptal edilir.
 - **Ödeme döngüsü:** x402 ile iş satın alma (üst sınır ödenir), emanet defteri, worker ödemeleri ve alıcıya iade tek Solana işleminde; çift ödeme koruması.
-- **MCP:** beş araç; ödeme x402 v2 MCP taşımasıyla; Claude masaüstü ve MCP Inspector ile denendi.
+- **MCP:** altı araç; ödeme x402 v2 MCP taşımasıyla; Claude masaüstü ve MCP Inspector ile denendi.
 - **Demo araçları:** canlı demo paneli ve simülasyonu tarayıcıda oynatan görsel sayfa.
 
 ## Mimari
@@ -187,6 +187,7 @@ HOST=0.0.0.0 PAYMENTS=1 PAYOUTS=1 npm run coordinator   # PLATFORM_PRIVATE_KEY .
 | Araç | Ne yapar |
 |---|---|
 | `list_modules` | WASM modülleri, özetleri, örnek DAG adları ve DAG biçimi |
+| `get_example` | Hazır bir örnek DAG'ın tamamı (ad ya da jobId ile); doğrudan `get_quote`/`submit_workflow`'a verilir |
 | `get_quote` | DAG + strateji için üst sınır (USDC); iş oluşturmaz |
 | `submit_workflow` | İşi gönderir; **ücretli** (x402) |
 | `get_status` | Görev sayıları, süre, defter ve worker ödemeleri; hemen döner |

@@ -55,13 +55,30 @@ const call = async (c: Client, name: string, args: Record<string, unknown>, meta
 const payloadFrom = (pr: Record<string, unknown>, tx: string) =>
   ({ x402Version: 2, resource: pr.resource, accepted: (pr.accepts as unknown[])[0], payload: { transaction: tx } });
 
-test("araç listesi: beş araç; get_result MCP Tasks destekli (optional)", () =>
+test("araç listesi: altı araç; get_result MCP Tasks destekli (optional)", () =>
   withMcp(async ({ client }) => {
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map((t) => t.name).sort(), ["get_quote", "get_result", "get_status", "list_modules", "submit_workflow"]);
+    assert.deepEqual(tools.map((t) => t.name).sort(), ["get_example", "get_quote", "get_result", "get_status", "list_modules", "submit_workflow"]);
     assert.equal(tools.find((t) => t.name === "get_result")!.execution?.taskSupport, "optional");
     const mods = await call(client, "list_modules", {});
     assert.ok((mods.structuredContent!.modules as unknown[]).length >= 3);
+  }));
+
+test("get_example: adla ya da jobId ile örneğin tamamı döner, teklife doğrudan verilir; bilinmeyen ad mevcutları listeler", () =>
+  withMcp(async ({ client, logs }) => {
+    const byName = await call(client, "get_example", { name: "image-pipeline" });
+    assert.ok(!byName.isError, JSON.stringify(byName));
+    const ex = byName.structuredContent! as { name: string; dag: { jobId: string; tasks: unknown[] } };
+    assert.equal(ex.name, "image-pipeline");
+    assert.equal(ex.dag.tasks.length, 7);
+    const byJobId = await call(client, "get_example", { name: ex.dag.jobId });
+    assert.deepEqual(byJobId.structuredContent, byName.structuredContent);
+    const q = await call(client, "get_quote", { dag: ex.dag, verifier: "adaptive" });
+    assert.equal((q.structuredContent!.quote as { tasks: number }).tasks, 7);
+    const none = await call(client, "get_example", { name: "yok-boyle" });
+    assert.equal(none.isError, true);
+    assert.match(none.content[0].text!, /image-pipeline/);
+    assert.ok(logs.some((l) => l.startsWith("araç get_example {image-pipeline} → image-pipeline: 7 görev")), logs.join("\n"));
   }));
 
 test("get_quote: üst sınır HTTP /quote ile aynı; iş oluşturmaz", () =>

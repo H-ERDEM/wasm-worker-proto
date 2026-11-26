@@ -14,7 +14,7 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 7 | 8–9 | Gerçek stratejiler: en hızlı öncelikli, itibar ağırlıklı; sabit 2'li, sabit 3'lü, uyarlanabilir | `coordinator/src/strategies.ts`, `sim/vcsim/strategies/` | ✅ simülatörde (8. hafta) ve koordinatörde (9. hafta); ortak senaryolar `shared/test/strategy-scenarios.json` |
 | 8 | 9 | İtibar (Beta, α/β, λ, w), sınama işi kâhini (Node WASM), geriye dönük iptal, bütçe ve emanet | `coordinator/`, `sim/` | ✅ itibar, sınama işi kâhini, geriye dönük iptal, iş sonunda ödeme; x402 ile iş satın alma ve emanet defteri; Devnet'te `job_336a3fe8` ve tekrarlanan ödeme başlığının reddi (imzalar `payments/x402-proto/README.md`) |
 | 9 | 10 | x402'nin `POST /jobs` önüne bağlanması, worker ödemeleri (SPL), MCP adaptörü | `coordinator/`, `payments/` | ✅ x402 iş satın alma; worker ödemeleri ve iade; MCP sunucusu (x402 MCP taşıması, Tasks); harici istemciler (MCP Inspector, Claude masaüstü, 25 Kasım); **Devnet (26 Kasım):** `job_84adbcea` (CLI) ve `job_22616c0d` (`mcp-agent`, MCP üzerinden ödemeli) — worker ödemeleri ve iade tek işlemde kesinleşti |
-| 10 | 11 | Yapay zekâ ajanı, Playwright deney koşucuları; MCP'ye `get_example` aracı (örnek DAG'ın içeriğini döndürür) | `agent/`, `experiments/`, `coordinator/src/mcp/` | — |
+| 10 | 11 | Yapay zekâ ajanı, Playwright deney koşucuları (MCP `get_example` 26 Kasım'da öne alındı) | `agent/`, `experiments/`, `coordinator/src/mcp/` | — |
 | 11 | 12–13 | Deney matrisi, analiz, rapor | `experiments/`, `docs/` | — |
 
 ## Aşamalar arası kurallar
@@ -88,3 +88,4 @@ Proje bu depoda tek bir bütün olarak büyür. Her aşama bir öncekinin üstü
 | 2026-11-26 | Hafta 10 kapandı: Devnet'te uçtan uca ödeme döngüsü (alıcı → platform → worker'lar + iade), CLI ve MCP yoluyla | İki iş, iki tarayıcı; ödemeler tek işlemde `confirmed`. Worker ödeme adresleri yalnızca alma amaçlı üretilmiş deneme adresleri |
 | 2026-11-26 | İşin kaynağı (`source`: panel, cli, mcp, api) `jobs` tablosuna, `job_submitted` olayına ve `GET /jobs/:id`'ye yazılır; panelde rozet | Demo provasında MCP ajanının gönderdiği iş panelde panelin kendi işinden ayırt edilemiyordu. Kayıt amaçlı; davranışı değiştirmez, bilinmeyen değer `api` |
 | 2026-11-26 | PR #4 (yerel facilitator) birleştirildi; çakışma çözümünde silinen Devnet kayıtları `payments/x402-proto/README.md`'ye geri kondu | Yerel facilitator isteğe bağlı yedek; varsayılan yine x402.org |
+| 2026-11-26 | MCP `get_example` 11. haftadan öne alındı (altı araç) | Demo provasında Claude masaüstü, `image-pipeline` örneğinin içeriğine ulaşamadığı için teklif alamadı (uydurmadı, sordu). Ad ya da jobId ile örneğin tamamını döndürür |
