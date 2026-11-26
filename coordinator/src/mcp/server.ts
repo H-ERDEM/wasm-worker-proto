@@ -27,6 +27,28 @@ export interface McpAdapterOptions {
   baseUrl: string;
   /** İş bitişini yoklama aralığı (ms). */
   pollMs?: number;
+  /** Her araç çağrısı için tek satırlık kayıt (stdio'da stderr'e; Claude masaüstü bunu sunucu günlüğüne yazar). */
+  log?: (line: string) => void;
+}
+
+/** Araç çağrısının kısa özeti: hangi iş, kaç görev, hangi strateji, ödemeli mi. */
+function describeCall(args: Record<string, unknown>, paid: boolean): string {
+  const parts: string[] = [];
+  if (typeof args.jobId === "string") parts.push(args.jobId);
+  const dag = args.dag as { tasks?: unknown[] } | undefined;
+  if (dag && Array.isArray(dag.tasks)) parts.push(`${dag.tasks.length} görev`);
+  if (typeof args.verifier === "string") parts.push(args.verifier);
+  if (paid) parts.push("ödeme yüklü");
+  return parts.join(", ");
+}
+
+/** Araç sonucunun kısa özeti: 402 ise "ödeme gerekli", değilse ilk metin satırı. */
+function describeResult(r: CallToolResult): string {
+  const sc = r.structuredContent as { x402Version?: number; error?: string } | undefined;
+  if (r.isError && sc?.x402Version) return `ödeme gerekli (402${sc.error ? `: ${sc.error}` : ""})`;
+  const first = r.content.find((c) => c.type === "text") as { text?: string } | undefined;
+  const text = (first?.text ?? "").replace(/\s+/g, " ").slice(0, 160);
+  return r.isError ? `hata: ${text}` : text;
 }
 
 const VERIFIERS = ["fixed2", "fixed3", "adaptive", "accept_first"] as const;
@@ -105,6 +127,18 @@ function resultOf(job: JobView) {
 export function createMcpServer(opts: McpAdapterOptions): McpServer {
   const base = opts.baseUrl.replace(/\/$/, "");
   const pollMs = opts.pollMs ?? 500;
+  const log = opts.log ?? (() => {});
+  // Her aracı sarmalar: çağrıyı ve sonucunu tek satırda kaydeder.
+  const logged = <A extends Record<string, unknown>, E extends { _meta?: Record<string, unknown> }>(
+    name: string,
+    fn: (args: A, extra: E) => Promise<CallToolResult>,
+  ) => async (args: A, extra: E): Promise<CallToolResult> => {
+    const t0 = Date.now();
+    const what = describeCall(args, !!extra?._meta?.[PAYMENT_META_KEY]);
+    const r = await fn(args, extra);
+    log(`araç ${name}${what ? ` {${what}}` : ""} → ${describeResult(r)} (${Date.now() - t0} ms)`);
+    return r;
+  };
   const getJob = async (jobId: string): Promise<JobView | null> => {
     const r = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}`);
     return r.status === 404 ? null : ((await r.json()) as JobView);
@@ -128,25 +162,25 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
     description: "Kullanılabilir WASM görev modülleri, özetleri ve örnek DAG'ler. " + DAG_HELP,
     inputSchema: {},
     annotations: { readOnlyHint: true },
-  }, async () => {
+  }, logged("list_modules", async () => {
     const [mods, examples] = await Promise.all([
       fetch(`${base}/modules`).then((r) => r.json()),
       fetch(`${base}/examples`).then((r) => (r.ok ? r.json() : [])),
     ]);
     return ok({ ...(mods as object), examples, dagFormat: DAG_HELP }, `${(mods as { modules: unknown[] }).modules.length} modül; ${(examples as unknown[]).length} örnek DAG`);
-  });
+  }));
 
   server.registerTool("get_quote", {
     title: "Fiyat teklifi",
     description: "Bir DAG için ödenecek üst sınırı (USDC) ve ödeme bilgisini döndürür; iş oluşturmaz, ödeme istemez. " + DAG_HELP,
     inputSchema: { dag: dagSchema.describe("DAG v0"), ...strategyShape },
     annotations: { readOnlyHint: true },
-  }, async (args) => {
+  }, logged("get_quote", async (args) => {
     const r = await fetch(`${base}/quote${query(args)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(args.dag) });
     const out = (await r.json()) as { quote?: { cap: string; tasks: number; verifier: string }; payment?: unknown; error?: string };
     if (!r.ok) return fail(`teklif alınamadı: ${out.error}`);
     return ok(out as Record<string, unknown>, `Üst sınır ${out.quote!.cap} USDC (${out.quote!.tasks} görev, ${out.quote!.verifier}); fark iş bitince iade edilir`);
-  });
+  }));
 
   server.registerTool("submit_workflow", {
     title: "İş gönder (ücretli)",
@@ -156,7 +190,7 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
       "Başarıda iş kimliği döner ve kesinleşme bilgisi _meta[\"x402/payment-response\"] içindedir. " + DAG_HELP,
     inputSchema: { dag: dagSchema.describe("DAG v0"), ...strategyShape },
     annotations: { readOnlyHint: false, idempotentHint: false },
-  }, async (args, extra) => {
+  }, logged("submit_workflow", async (args, extra) => {
     const payment = extra._meta?.[PAYMENT_META_KEY];
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (payment) {
@@ -179,19 +213,19 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
     const settle = r.headers.get("payment-response");
     const meta = settle ? { [PAYMENT_RESPONSE_META_KEY]: decodePaymentResponseHeader(settle) } : undefined;
     return ok(out as Record<string, unknown>, `İş gönderildi: ${out.jobId}` + (out.quote ? ` (ödenen üst sınır ${out.quote.cap} USDC)` : " (ödemesiz)"), meta);
-  });
+  }));
 
   server.registerTool("get_status", {
     title: "İş durumu",
     description: "İşin anlık durumu: görev sayıları, geçen süre, ödeme defteri (ödenen, gerçekleşen, iade, worker ödemeleri).",
     inputSchema: { jobId: z.string() },
     annotations: { readOnlyHint: true },
-  }, async ({ jobId }) => {
+  }, logged("get_status", async ({ jobId }) => {
     const job = await getJob(jobId);
     if (!job) return fail(`iş bulunamadı: ${jobId}`);
     const s = statusOf(job);
     return ok(s, `${jobId}: ${s.status}, ${s.tasks.accepted}/${s.tasks.total} görev kabul edildi`);
-  });
+  }));
 
   server.experimental.tasks.registerToolTask("get_result", {
     title: "İş sonucu",
@@ -204,17 +238,23 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
   }, {
     async createTask({ jobId }, { taskStore, taskRequestedTtl }) {
       const task = await taskStore.createTask({ ttl: taskRequestedTtl ?? 10 * 60_000, pollInterval: pollMs });
+      const t0 = Date.now();
+      log(`araç get_result {${jobId}} → görev açıldı (MCP Tasks), iş bitene kadar beklenir`);
+      const store = async (status: "completed" | "failed", r: CallToolResult) => {
+        log(`araç get_result {${jobId}} → ${describeResult(r)} (${Date.now() - t0} ms)`);
+        await taskStore.storeTaskResult(task.taskId, status, r);
+      };
       void (async () => {
         try {
           for (;;) {
             const job = await getJob(jobId);
             if (!job) {
-              await taskStore.storeTaskResult(task.taskId, "failed", fail(`iş bulunamadı: ${jobId}`));
+              await store("failed", fail(`iş bulunamadı: ${jobId}`));
               return;
             }
             if (job.status !== "RUNNING") {
               const res = resultOf(job);
-              await taskStore.storeTaskResult(task.taskId, job.status === "COMPLETED" ? "completed" : "failed",
+              await store(job.status === "COMPLETED" ? "completed" : "failed",
                 job.status === "COMPLETED" ? ok(res, `${jobId} tamamlandı: ${job.tasks.length} görev`) : fail(`${jobId} başarısız`, res));
               return;
             }

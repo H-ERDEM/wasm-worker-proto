@@ -216,6 +216,8 @@ npm run -s mcp-config     # node'un tam yolunu kullanır; Claude masaüstü term
 
 Claude masaüstü x402 ödemesini kendisi yapmaz; ödemesiz koordinatörle bütün araçlar kullanılabilir, ödemeli akış `mcp-agent` ile gösterilir.
 
+**Araç çağrısı kaydı.** Sunucu her araç çağrısını tek satır olarak stderr'e yazar, ör. `araç get_status {job_3c8982cb} → job_3c8982cb: COMPLETED, 7/7 görev kabul edildi (12 ms)`. Claude masaüstünde bu satırlar `~/Library/Logs/Claude/mcp-server-gonullu-hesaplama.log` dosyasına düşer (Claude'un kendi kaydı yalnızca bağlantıyı ve araç listesini tutuyor); Inspector'da terminalde görünür.
+
 **MCP Inspector** (MCP'nin resmî test aracı; araçları tarayıcıda elle çağırır):
 
 ```bash

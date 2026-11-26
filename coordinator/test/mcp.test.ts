@@ -26,10 +26,11 @@ const dag = (n: number) => ({
   tasks: Array.from({ length: n }, (_, i) => ({ id: `t${i}`, module: "sha_chain", input: { seed: `m-${i}`, iterations: 20 } })),
 });
 
-type Ctx = { s: Awaited<ReturnType<typeof createServer>>; client: Client };
+type Ctx = { s: Awaited<ReturnType<typeof createServer>>; client: Client; logs: string[] };
 async function withMcp(fn: (c: Ctx) => Promise<void>, paid = true) {
   const s = await createServer({ config: FAST, oracle: jsOracle, ...(paid ? { payments: { payTo: PAY_TO, facilitatorUrl: fac.url } } : {}) });
-  const mcp = createMcpServer({ baseUrl: s.url, pollMs: 20 });
+  const logs: string[] = [];
+  const mcp = createMcpServer({ baseUrl: s.url, pollMs: 20, log: (l) => logs.push(l) });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   await mcp.connect(st);
   const client = new Client({ name: "test-ajan", version: "1" }, { capabilities: {} });
@@ -37,7 +38,7 @@ async function withMcp(fn: (c: Ctx) => Promise<void>, paid = true) {
   const w1 = startFakeWorker(s.wsUrl), w2 = startFakeWorker(s.wsUrl);
   await Promise.all([w1.id, w2.id]);
   try {
-    await fn({ s, client });
+    await fn({ s, client, logs });
   } finally {
     w1.close(); w2.close();
     await client.close();
@@ -139,6 +140,21 @@ test("get_result MCP Tasks ile: görev oluşur, tasks/get ile yoklanır, tasks/r
     const res = await client.experimental.tasks.getTaskResult(taskId, CallToolResultSchema);
     assert.equal((res.structuredContent as { status: string }).status, "COMPLETED");
   }, false));
+
+test("araç çağrıları kaydedilir: hangi araç, hangi iş, sonuç (ödeme gerekli ve iş kimliği dahil)", () =>
+  withMcp(async ({ client, logs }) => {
+    await call(client, "list_modules", {});
+    const pr = (await call(client, "submit_workflow", { dag: dag(2), verifier: "fixed2" })).structuredContent!;
+    const paid = await call(client, "submit_workflow", { dag: dag(2), verifier: "fixed2" }, { [PAYMENT_META_KEY]: payloadFrom(pr, "TX_LOG") });
+    const jobId = paid.structuredContent!.jobId as string;
+    await call(client, "get_result", { jobId });
+    await call(client, "get_status", { jobId });
+    assert.match(logs[0], /^araç list_modules → \d+ modül/);
+    assert.match(logs[1], /^araç submit_workflow \{2 görev, fixed2\} → ödeme gerekli \(402/);
+    assert.match(logs[2], new RegExp(`^araç submit_workflow \\{2 görev, fixed2, ödeme yüklü\\} → İş gönderildi: ${jobId}`));
+    assert.ok(logs.some((l) => l.startsWith(`araç get_result {${jobId}} → ${jobId} tamamlandı`)), logs.join("\n"));
+    assert.match(logs.at(-1)!, new RegExp(`^araç get_status \\{${jobId}\\} → ${jobId}: COMPLETED, 2/2 görev`));
+  }));
 
 test("ödeme kapalı koordinatörde submit_workflow ödemesiz çalışır", () =>
   withMcp(async ({ client }) => {
