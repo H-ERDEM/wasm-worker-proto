@@ -1,15 +1,48 @@
+<div align="center">
+
 # wasm-worker-proto
 
-**x402 ile stablecoin mikro ödemeli, tarayıcı tabanlı gönüllü hesaplama platformu** — dönem projesinin deposu.
+**x402 ile stablecoin mikro ödemeli, tarayıcı tabanlı gönüllü hesaplama platformu**
 
-Gönüllüler bir web sayfasını açıp onay vererek bilgisayarlarının ya da telefonlarının işlem gücünü paylaşır; kurulum gerekmez. İşler, Rust'tan derlenmiş WebAssembly görevlerinden oluşan iş akışlarıdır (DAG). Bir **koordinatör** görevleri tarayıcılara dağıtır, sonuçları **itibar tabanlı uyarlanabilir replikasyon** ve **sınama işleriyle** doğrular. Alıcı işi **x402** ile Solana Devnet USDC ödeyerek satın alır; iş bitince doğrulanmış her sonuç için worker'a ödeme yapılır, kalan tutar alıcıya iade edilir. Platform, **MCP** sunucusu üzerinden yapay zekâ ajanlarına da açıktır. Farklı zamanlama ve doğrulama stratejileri bir **SimPy simülatöründe** ve gerçek tarayıcılarda karşılaştırılır.
+WebAssembly iş akışlarının (DAG) zamanlanması · itibar tabanlı uyarlanabilir replikasyonla doğrulama · MCP arayüzü ve yapay zekâ ajanı
 
-İlerleme ve kararlar: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+[![CI](https://github.com/H-ERDEM/wasm-worker-proto/actions/workflows/ci.yml/badge.svg)](https://github.com/H-ERDEM/wasm-worker-proto/actions/workflows/ci.yml)
+[![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-blue.svg)](LICENSE)
+![Node.js](https://img.shields.io/badge/node-%E2%89%A522.18-339933?logo=node.js&logoColor=white)
+![Rust/WASM](https://img.shields.io/badge/Rust-WebAssembly-654FF0?logo=webassembly&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11%2B%20%C2%B7%20SimPy-3776AB?logo=python&logoColor=white)
+![Solana Devnet](https://img.shields.io/badge/Solana-Devnet%20USDC-9945FF?logo=solana&logoColor=white)
+![Durum](https://img.shields.io/badge/durum-geli%C5%9Ftiriliyor-orange)
+
+</div>
+
+---
+
+## Genel bakış
+
+Gönüllüler bir web sayfasını açıp onay vererek bilgisayarlarının ya da telefonlarının işlem gücünü paylaşır; **kurulum gerekmez**. İşler, Rust'tan derlenmiş WebAssembly görevlerinden oluşan iş akışlarıdır (DAG). Bir **koordinatör** görevleri tarayıcılara dağıtır, sonuçları **itibar tabanlı uyarlanabilir replikasyon** ve **sınama işleriyle** doğrular. Alıcı işi **x402** ile Solana Devnet USDC ödeyerek satın alır; iş bitince doğrulanmış her sonuç için worker'a ödeme yapılır, kalan tutar alıcıya iade edilir. Platform, **MCP** sunucusu üzerinden yapay zekâ ajanlarına da açıktır. Farklı zamanlama ve doğrulama stratejileri bir **SimPy simülatöründe** ve gerçek tarayıcılarda karşılaştırılır.
 
 > **English summary.** A browser-based volunteer computing platform. Volunteers open a web page; a coordinator schedules DAGs of deterministic Rust/WASM tasks onto their browsers' Web Workers, verifies results with reputation-based adaptive replication and spot checks, and pays volunteers in Devnet USDC. Buyers (people or AI agents) purchase jobs over x402; the platform is also exposed as an MCP server. A SimPy simulator and real-browser experiments compare scheduling and verification strategies.
 
+### Proje durumu
+
+| Bileşen | Durum |
+|---|---|
+| Rust/WASM görevleri, Web Worker, test vektörleri | ✅ Tamamlandı |
+| Koordinatör (HTTP API, WebSocket, DAG kuyruğu, SQLite) | ✅ Tamamlandı |
+| Gönüllü sayfası (masaüstü ve Android) | ✅ Tamamlandı |
+| Zamanlama ve doğrulama stratejileri, itibar, sınama işi, geriye dönük iptal | ✅ Tamamlandı |
+| x402 ile iş satın alma, worker ödemeleri ve iade (Solana Devnet) | ✅ Tamamlandı |
+| MCP sunucusu (Claude masaüstü ve MCP Inspector ile denendi) | ✅ Tamamlandı |
+| SimPy simülatörü ve ilk karşılaştırma grafikleri | ✅ Tamamlandı |
+| Doğal dilden DAG üreten yapay zekâ ajanı | 🚧 Geliştiriliyor |
+| Gerçek tarayıcı deney matrisi, analiz ve final raporu | 🚧 Planlandı |
+
+Ayrıntılı ilerleme ve karar kaydı: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 ## İçindekiler
 
+- [Genel bakış](#genel-bakış)
 - [Özellikler](#özellikler)
 - [Mimari](#mimari)
 - [Hızlı başlangıç](#hızlı-başlangıç)
@@ -26,6 +59,7 @@ Gönüllüler bir web sayfasını açıp onay vererek bilgisayarlarının ya da 
 - [Proje yapısı](#proje-yapısı)
 - [Sınırlılıklar](#sınırlılıklar)
 - [Lisans](#lisans)
+- [Proje hakkında](#proje-hakkında)
 
 ## Özellikler
 
@@ -379,8 +413,22 @@ wasm-worker-proto/
 - Sınama işi yakalaması olasılıksaldır: iş bitmeden yakalanmayan tek kopyalı yanlış sonuç geri alınamaz (`late_detection` olarak sayılır).
 - Simülatördeki hız ve oturum dağılımları gerçek tarayıcı ölçümleriyle kalibre edilecek.
 - Safari/iOS denenmedi.
-- Sıradaki işler (yapay zekâ ajanı, MCP `get_example` aracı, deney matrisi): [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Sıradaki işler (yapay zekâ ajanı, Playwright deney koşucuları, deney matrisi): [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Lisans
 
-MIT. Ayrıntılar için [`LICENSE`](LICENSE). Kod, simülatör ve deney verisi bu depoda açık olarak yayımlanır.
+[MIT](LICENSE) © 2026 Hayrunnisa Büşra Erdem. Kod, simülatör ve deney verisi bu depoda açık olarak yayımlanır.
+
+## Proje hakkında
+
+> [!NOTE]
+> **Bu depo, devam eden bir dönem projesidir.** Çalışma aktif olarak geliştirilmektedir; arayüzler, parametreler ve sonuçlar dönem boyunca değişebilir. Bu sürüm bir araştırma prototipidir ve üretim ortamında kullanım için tasarlanmamıştır: ödemeler yalnızca Solana Devnet'te test USDC ile yapılır.
+
+| | |
+|---|---|
+| **Proje** | x402 ile stablecoin mikro ödemeli, tarayıcı tabanlı gönüllü hesaplama platformu |
+| **Geliştiren** | Hayrunnisa Büşra Erdem |
+| **Tür** | Dönem projesi (2026, güz dönemi) |
+| **Durum** | 🚧 Devam ediyor: yapay zekâ ajanı, gerçek tarayıcı deneyleri ve final raporu sırada |
+
+Geri bildirim ve öneriler için bir [issue](https://github.com/H-ERDEM/wasm-worker-proto/issues) açabilirsiniz.
