@@ -18,6 +18,10 @@ export interface ServerOptions {
 export function createApp(opts: ServerOptions) {
   const facilitator = new HTTPFacilitatorClient({ url: opts.facilitatorUrl });
   const resourceServer = new x402ResourceServer(facilitator).register(SOLANA_DEVNET, new ExactSvmScheme());
+  // Facilitator ödemeyi kesinleştiremezse nedenini sunucu terminaline yazar (ör. RPC 429 sınırı).
+  resourceServer.onSettleFailure(async (ctx) => {
+    console.error(`Ödeme kesinleştirilemedi: ${ctx.error?.message ?? ctx.error}`);
+  });
 
   const app = express();
   app.get("/health", (_req, res) => res.json({ ok: true }));
