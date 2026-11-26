@@ -10,7 +10,7 @@
  *   - başarıda kesinleşme bilgisi `_meta["x402/payment-response"]` = SettlementResponse.
  * Böylece üst sınır + iade kurgusu, DAG doğrulaması ve tekrar koruması HTTP yoluyla aynı kalır.
  *
- * Araçlar: list_modules, get_quote, submit_workflow (ücretli), get_status, get_result
+ * Araçlar: list_modules, get_example, get_quote, submit_workflow (ücretli), get_status, get_result
  * (MCP Tasks: taskSupport "optional"; görev isteği olmadan çağrılırsa iş bitene kadar bekler).
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -35,6 +35,7 @@ export interface McpAdapterOptions {
 function describeCall(args: Record<string, unknown>, paid: boolean): string {
   const parts: string[] = [];
   if (typeof args.jobId === "string") parts.push(args.jobId);
+  if (typeof args.name === "string") parts.push(args.name);
   const dag = args.dag as { tasks?: unknown[] } | undefined;
   if (dag && Array.isArray(dag.tasks)) parts.push(`${dag.tasks.length} görev`);
   if (typeof args.verifier === "string") parts.push(args.verifier);
@@ -151,7 +152,7 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
       capabilities: { tools: {}, tasks: { requests: { tools: { call: {} } } } },
       taskStore,
       instructions:
-        "Tarayıcı tabanlı gönüllü hesaplama platformu. Akış: list_modules → get_quote → submit_workflow (x402 ile ödenir; " +
+        "Tarayıcı tabanlı gönüllü hesaplama platformu. Akış: list_modules → (hazır örnek için get_example) → get_quote → submit_workflow (x402 ile ödenir; " +
         "ilk çağrı ödeme koşullarını döner, aynı çağrıyı _meta[\"x402/payment\"] ile tekrarlayın) → get_status / get_result. " +
         "Alıcı üst sınırı öder; iş bitince gerçekleşen maliyetin fazlası iade edilir. Devnet, test USDC.",
     },
@@ -159,7 +160,7 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
 
   server.registerTool("list_modules", {
     title: "Görev modülleri",
-    description: "Kullanılabilir WASM görev modülleri, özetleri ve örnek DAG'ler. " + DAG_HELP,
+    description: "Kullanılabilir WASM görev modülleri, özetleri ve örnek DAG'lerin adları. Bir örneğin içeriği (görevler, girdiler, bağımlılıklar) için get_example. " + DAG_HELP,
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, logged("list_modules", async () => {
@@ -168,6 +169,25 @@ export function createMcpServer(opts: McpAdapterOptions): McpServer {
       fetch(`${base}/examples`).then((r) => (r.ok ? r.json() : [])),
     ]);
     return ok({ ...(mods as object), examples, dagFormat: DAG_HELP }, `${(mods as { modules: unknown[] }).modules.length} modül; ${(examples as unknown[]).length} örnek DAG`);
+  }));
+
+  server.registerTool("get_example", {
+    title: "Örnek DAG",
+    description:
+      "Hazır bir örnek iş akışının (DAG) tamamını döndürür: görevler, girdiler, bağımlılıklar. Ad (ör. image-pipeline) " +
+      "ya da örneğin jobId'si (ör. ornek-goruntu-hatti) verilebilir; adlar list_modules'taki examples listesindedir. " +
+      "Dönen dag doğrudan get_quote ve submit_workflow'a verilebilir.",
+    inputSchema: { name: z.string().describe("Örneğin adı ya da jobId'si") },
+    annotations: { readOnlyHint: true },
+  }, logged("get_example", async ({ name }) => {
+    const list = (await fetch(`${base}/examples`).then((r) => (r.ok ? r.json() : []))) as { name: string; jobId: string | null; tasks: number }[];
+    const hit = list.find((e) => e.name === name) ?? list.find((e) => e.jobId === name);
+    if (!hit) return fail(`örnek bulunamadı: ${name}. Mevcut örnekler: ${list.map((e) => e.name).join(", ")}`);
+    const r = await fetch(`${base}/examples/${encodeURIComponent(hit.name)}`);
+    if (!r.ok) return fail(`örnek okunamadı: ${hit.name}`);
+    const dag = (await r.json()) as { tasks: { module: string }[] };
+    const mods = [...new Set(dag.tasks.map((t) => t.module))].join(", ");
+    return ok({ name: hit.name, dag }, `${hit.name}: ${dag.tasks.length} görev (${mods}); dag alanını get_quote ya da submit_workflow'a verin`);
   }));
 
   server.registerTool("get_quote", {
