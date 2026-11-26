@@ -1,303 +1,383 @@
 # wasm-worker-proto
 
-Tarayıcıda **Web Worker içinde Rust'tan derlenmiş WebAssembly (WASM) görevleri** çalıştıran, belirlenimci (deterministic) bir prototip. Bu, *x402 ile stablecoin mikro ödemeli, tarayıcı tabanlı gönüllü hesaplama platformu* dönem projesinin deposudur. 5. haftada worker çekirdeği olarak başladı; 6–7. haftalarda **koordinatör**, **gönüllü sayfası**, **SimPy simülatörü** ve **x402 prototipi** eklendi. Proje aşama aşama büyür: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**x402 ile stablecoin mikro ödemeli, tarayıcı tabanlı gönüllü hesaplama platformu** — dönem projesinin deposu.
 
-> **English summary.** A browser page that runs deterministic, integer-only Rust/WASM tasks inside a module Web Worker, behind a stable message protocol (`{taskId, module, input}` → `{taskId, status, output, durationMs}`). Includes a pure-JavaScript baseline, fixed cross-checked test vectors, Node and headless-browser tests, and a WASM-vs-JS benchmark. Part of a term project on browser-based volunteer computing with adaptive result verification.
+Gönüllüler bir web sayfasını açıp onay vererek bilgisayarlarının ya da telefonlarının işlem gücünü paylaşır; kurulum gerekmez. İşler, Rust'tan derlenmiş WebAssembly görevlerinden oluşan iş akışlarıdır (DAG). Bir **koordinatör** görevleri tarayıcılara dağıtır, sonuçları **itibar tabanlı uyarlanabilir replikasyon** ve **sınama işleriyle** doğrular. Alıcı işi **x402** ile Solana Devnet USDC ödeyerek satın alır; iş bitince doğrulanmış her sonuç için worker'a ödeme yapılır, kalan tutar alıcıya iade edilir. Platform, **MCP** sunucusu üzerinden yapay zekâ ajanlarına da açıktır. Farklı zamanlama ve doğrulama stratejileri bir **SimPy simülatöründe** ve gerçek tarayıcılarda karşılaştırılır.
+
+İlerleme ve kararlar: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+> **English summary.** A browser-based volunteer computing platform. Volunteers open a web page; a coordinator schedules DAGs of deterministic Rust/WASM tasks onto their browsers' Web Workers, verifies results with reputation-based adaptive replication and spot checks, and pays volunteers in Devnet USDC. Buyers (people or AI agents) purchase jobs over x402; the platform is also exposed as an MCP server. A SimPy simulator and real-browser experiments compare scheduling and verification strategies.
 
 ## İçindekiler
 
 - [Özellikler](#özellikler)
 - [Mimari](#mimari)
 - [Hızlı başlangıç](#hızlı-başlangıç)
-- [Platform (Hafta 6–7)](#platform-hafta-67)
-- [Görev arayüzü ve mesaj protokolü](#görev-arayüzü-ve-mesaj-protokolü)
-- [Görevler](#görevler)
-- [Belirlenimcilik ve test vektörleri](#belirlenimcilik-ve-test-vektörleri)
+- [Koordinatör](#koordinatör)
+- [Gönüllü sayfası](#gönüllü-sayfası)
+- [Doğrulama ve itibar](#doğrulama-ve-itibar)
+- [Ödemeler](#ödemeler)
+- [MCP sunucusu](#mcp-sunucusu)
+- [Demo araçları](#demo-araçları)
+- [Simülatör](#simülatör)
+- [WASM görev çekirdeği](#wasm-görev-çekirdeği)
 - [Testler](#testler)
-- [Performans ölçümü](#performans-ölçümü)
-- [Tarayıcı desteği](#tarayıcı-desteği)
 - [Sorun giderme](#sorun-giderme)
 - [Proje yapısı](#proje-yapısı)
-- [Sınırlılıklar ve yol haritası](#sınırlılıklar-ve-yol-haritası)
+- [Sınırlılıklar](#sınırlılıklar)
+- [Lisans](#lisans)
 
 ## Özellikler
 
-- **İki belirlenimci görev:** SHA-256 hash zinciri ve sarmalı (wrapping) aritmetikle tamsayı matris çarpımı. Kayan nokta (float) kullanılmaz.
-- **Ortak görev arayüzü:** her görev `run(input_json: &str) -> String` imzasını taşır; çıktı kanonik JSON'dur (anahtarlar sıralı, boşluksuz), böylece sonuçlar bayt düzeyinde karşılaştırılabilir.
-- **Web Worker izolasyonu:** hesaplama ana iş parçacığını bloke etmez. Sayfadaki kare sayacı ve döner simge bunu görünür kılar.
-- **Hata dayanıklılığı:** geçersiz girdi, bilinmeyen modül, WASM yükleme hatası, panic ve zaman aşımı raporlanır. Panic sonrası worker otomatik yeniden başlatılır.
-- **Üç bağımsız uygulama çapraz doğrulaması:** Rust/WASM, saf JavaScript ve Python (`hashlib`) aynı test vektörlerini üretir.
-- **Dahili WASM–JS karşılaştırması** ve Node/Playwright testleri.
+- **Kurulumsuz katılım:** gönüllü sayfası onay, CPU sınırı, "yalnızca şarjdayken" koşulu ve yeniden bağlanma ile gelir; görevler izole Web Worker'da çalışır.
+- **DAG iş akışları:** görevler bağımlılık sırasıyla çalışır; bir görevin girdisi üst görevin çıktısına `$ref` ile bağlanır.
+- **Belirlenimci görevler:** `sha_chain`, `matmul`, `image_blur`; yalnızca tamsayı işlemleri, kanonik JSON çıktı. Rust/WASM, saf JS ve Python aynı test vektörlerini üretir.
+- **Stratejiler:** zamanlayıcılar `fifo`, `fastest`, `reputation`; doğrulayıcılar `accept_first`, `fixed2`, `fixed3`, `adaptive`. Koordinatör ve simülatör aynı ortak senaryoları geçer.
+- **İtibar ve sınama:** Beta itibar modeli; güvenilir worker'ın sonucu tek kopyayla kabul edilir, sınama işinde yakalanan worker'ın bitmemiş işlerdeki tek kopyalı sonuçları geriye dönük iptal edilir.
+- **Ödeme döngüsü:** x402 ile iş satın alma (üst sınır ödenir), emanet defteri, worker ödemeleri ve alıcıya iade tek Solana işleminde; çift ödeme koruması.
+- **MCP:** beş araç; ödeme x402 v2 MCP taşımasıyla; Claude masaüstü ve MCP Inspector ile denendi.
+- **Demo araçları:** canlı demo paneli ve simülasyonu tarayıcıda oynatan görsel sayfa.
 
 ## Mimari
 
 ```mermaid
 flowchart LR
-  UI["Ana sayfa<br/>index.html + main.js"] -- "{taskId, module, input, impl}" --> W["Web Worker<br/>worker.js"]
-  W -- "{taskId, status, output, durationMs}" --> UI
-  W --> WASM["Rust / WASM<br/>pkg/vc_tasks"]
-  W --> JS["Saf JS<br/>js-baseline.js"]
+  B["Alıcı<br/>submit CLI · panel · ajan"] -- "POST /quote, POST /jobs<br/>(x402)" --> API
+  AG["MCP istemcisi<br/>Claude masaüstü · Inspector · mcp-agent"] -- "stdio" --> MCP["MCP sunucusu<br/>coordinator/src/mcp"]
+  MCP -- "HTTP" --> API
+  subgraph C["coordinator/ (Node.js + TypeScript)"]
+    API["HTTP API"] --> CORE["Çekirdek<br/>iş / görev / kopya durum makineleri"]
+    CORE --> ST["Zamanlayıcı + doğrulayıcı<br/>itibar, sınama işi, geriye dönük iptal"]
+    CORE --> DB[("SQLite<br/>olay kaydı, emanet defteri")]
+    CORE --> PO["Ödeme servisi<br/>worker ödemeleri + iade"]
+    HUB["WebSocket /ws"] <--> CORE
+  end
+  API -- "doğrula / kesinleştir" --> F["x402 facilitator"]
+  PO -- "USDC transferi" --> SOL[("Solana Devnet")]
+  F --> SOL
+  HUB <--> P["Gönüllü sayfası<br/>volunteer.html"]
+  P --> W["Web Worker<br/>Rust/WASM"]
+  SH["shared/<br/>şemalar, parametreler, ortak senaryolar"] -.-> C
+  SH -.-> SIM["sim/ (SimPy)"]
 ```
 
-- `target: web` ile derlenir; worker, ES modülü olarak (`new Worker(url, {type: "module"})`) çalışır ve WASM'i ilk görevde tembel (lazy) yükler. Böylece yükleme hatası, worker'ı öldürmek yerine o görevin hatası olarak döner.
-- `impl` alanı yalnızca karşılaştırma içindir (`"wasm"` varsayılan, `"js"` saf JavaScript sürümü).
+Koordinatör tek süreçtir; MCP sunucusu koordinatöre yalnızca HTTP ile bağlanan ince bir adaptördür. Ortak sözleşme (`shared/`) koordinatör ve simülatörün aynı DAG biçimini, parametreleri ve strateji anlamlarını kullanmasını sağlar.
 
 ## Hızlı başlangıç
 
-**Gereksinimler:** Rust (rustup), `wasm32-unknown-unknown` hedefi, [`wasm-pack`](https://rustwasm.github.io/wasm-pack/), Node.js (testler için; Node 22 ile denendi) ve Python 3 (yerel sunucu için).
+**Gereksinimler:** Node.js 22.18+, Python 3.11+ (simülatör), Rust + `wasm32-unknown-unknown` hedefi + [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) (WASM derlemesi).
 
 ```bash
-rustup target add wasm32-unknown-unknown
-cargo install wasm-pack --locked
-
 git clone https://github.com/H-ERDEM/wasm-worker-proto.git
 cd wasm-worker-proto
-
-npm run build      # wasm-pack build --release --target web --out-dir pkg
-npm run serve      # python3 -m http.server 8080
-```
-
-Ardından tarayıcıda **<http://localhost:8080>** adresini açın. WASM `file://` ile çalışmaz, mutlaka bir HTTP sunucusu kullanın (`npx serve .` de olur).
-
-Sayfada: görev seçin, JSON girdiyi düzenleyin, **Çalıştır**'a basın. **Test vektörlerini doğrula** düğmesi tüm sabit vektörleri WASM ve JS ile çalıştırıp beklenenle karşılaştırır. **WASM vs JS ölçümü** süre karşılaştırması yapar.
-
-> `pkg/` klasörü derleme çıktısıdır ve depoya dahil değildir; önce `npm run build` çalıştırılmalıdır.
-
-## Platform (Hafta 6–7)
-
-```mermaid
-flowchart LR
-  U["Kullanıcı / betik<br/>npm run submit"] -- "POST /jobs (DAG v0)" --> API
-  subgraph C["coordinator/ (Node.js + TypeScript)"]
-    API["HTTP API"] --> CORE["Çekirdek<br/>iş / görev / kopya durum makineleri"]
-    CORE --> S["Scheduler: fifo"]
-    CORE --> V["Verifier: accept_first"]
-    CORE --> DB[("SQLite<br/>olay kaydı")]
-    HUB["WebSocket /ws<br/>şema doğrulama, heartbeat"] <--> CORE
-  end
-  HUB <--> P["volunteer.html<br/>ws-client + WorkerClient"]
-  P --> W["worker.js<br/>Rust/WASM"]
-  SH["shared/<br/>şemalar + parametreler"] -.-> C
-  SH -.-> SIM["sim/ (SimPy)<br/>aynı sözleşme, aynı olay sütunları"]
-  X["payments/x402-proto<br/>Solana Devnet"] -. "8. aşamada /jobs önüne" .-> API
-```
-
-### Çalıştırma
-
-**Gereksinim:** Node.js 22.18+, Python 3.11+ (simülatör için), Rust + `wasm-pack` (WASM derlemesi için).
-
-```bash
 npm install
 pip install -r sim/requirements.txt
-npm run build                 # pkg/ (WASM)
+npm run build                 # pkg/ (WASM); derlenmezse sayfa saf JS ile çalışır
 
-npm run coordinator           # http://127.0.0.1:8787  → / gönüllü sayfasını açar
-npm run submit -- shared/examples/three-task-dag.json --wait
+npm run coordinator           # http://127.0.0.1:8787
 ```
 
-Tarayıcıda `http://127.0.0.1:8787` adresini açın, **Katılıyorum, başlat** düğmesine basın ve iş gönderin. Aynı ağdaki bir telefon için koordinatörü `HOST=0.0.0.0 npm run coordinator` ile başlatıp `http://<bilgisayar-IP>:8787` adresini açın. Tarayıcı olmadan denemek için `node coordinator/test/run-fake-worker.ts` komutu Node'da bir sahte worker bağlar.
+1. Tarayıcıda **http://127.0.0.1:8787** adresini açıp **Katılıyorum, başlat**'a basın. `adaptive` ve `fixed2` doğrulama iki farklı tarayıcının sonucunu karşılaştırdığı için ikinci bir tarayıcıda (ör. Firefox + Chrome) da açın; aynı tarayıcının iki sekmesi aynı worker sayılır.
+2. İkinci terminalde bir iş gönderin:
+   ```bash
+   npm run submit -- shared/examples/three-task-dag.json --verifier adaptive --wait
+   ```
+3. Canlı izlemek için **http://127.0.0.1:8787/panel** adresini açın.
+
+Aynı ağdaki bir telefonla katılmak için koordinatörü `HOST=0.0.0.0 npm run coordinator` ile başlatıp telefonda `http://<bilgisayar-IP>:8787` adresini açın. Tarayıcı olmadan denemek için `node coordinator/test/run-fake-worker.ts` bir sahte worker bağlar.
+
+## Koordinatör
+
+Varsayılan stratejiler `shared/config`'tedir; iş başına `?scheduler=` ve `?verifier=` ile değişir. Ortam değişkenleri: `HOST`, `PORT`, `PAYMENTS=1` (x402), `PAYOUTS=1` (worker ödemeleri), `RPC_URL`.
 
 ### HTTP API
 
 | Yöntem | Yol | Açıklama |
 |---|---|---|
-| `POST` | `/jobs` | DAG v0 gönderir → `201 {jobId}`; geçersiz DAG → `400` |
-| `GET` | `/jobs/:id` | İş durumu, görev durumları, kabul edilen çıktılar |
-| `GET` | `/workers` | Bağlı worker'lar |
+| `POST` | `/quote` | DAG için fiyat teklifi (üst sınır); iş oluşturmaz, ödeme istemez |
+| `POST` | `/jobs` | DAG gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`; ödeme açıksa ödemesiz istek → `402`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first` |
+| `GET` | `/jobs/:id` | Durum, stratejiler, görevler, kabul edilen çıktılar, sınama sayısı, emanet defteri ve worker ödemeleri |
+| `GET` | `/workers` | Bağlı worker'lar: hız, α, β, itibar R, güvenilir mi, `flagged` (sınamada yakalanmış; yalnızca izleme) |
+| `GET` | `/modules` | WASM paket özeti (`moduleHash`) ve modül listesi |
+| `GET` | `/panel`, `/examples`, `/events`, `/demo/info` | Demo paneli ve beslediği uç noktalar |
+| `POST` | `/demo/buy` | Panel alıcısı: x402 ile öder ve iş gönderir; yalnızca aynı makineden |
 | `GET` | `/health` | Sağlık kontrolü |
 | `GET` | `/`, `/*.html`, `/*.js`, `/pkg/*` | Gönüllü sayfası ve WASM; kaynak kod ve dizin gezintisi kapalı |
 
-DAG v0 biçimi `shared/schemas/dag.v0.schema.json` dosyasında; örnekler `shared/examples/` altında. Bir görevin girdisi, bağımlı olduğu görevin kabul edilmiş çıktısına `{"$ref": "t1.output.hash"}` ile başvurabilir.
+**DAG v0** biçimi `shared/schemas/dag.v0.schema.json`'da, örnekler `shared/examples/` altında (`single-task`, `three-task-dag`, `image-pipeline`, `matrix-chain`, `demo-40`). Bir görevin girdisi bağımlı olduğu görevin kabul edilmiş çıktısına `{"$ref": "t1.output.hash"}` ile başvurur. Her görev WASM paketinin özetine (`moduleHash`) bağlanır; DAG'de verilmişse eşleşmelidir, verilmemişse koordinatör doldurur.
 
 ### WebSocket protokolü (`/ws`)
 
-Görev mesajı, aşağıdaki "Görev arayüzü ve mesaj protokolü" bölümündeki Web Worker protokolünün bir zarf içine konmuş hâlidir.
-
 | Yön | Mesaj |
 |---|---|
-| W → K | `hello {consent: true, workerId?, userAgent?, deviceClass?, impls?}` |
+| W → K | `hello {consent: true, workerId?, userAgent?, deviceClass?, impls?, wallet?}` |
 | K → W | `welcome {workerId, heartbeatMs, modules}` |
-| K → W | `assign {replicaId, module, input, deadlineMs}` |
+| K → W | `assign {replicaId, module, input, deadlineMs, moduleHash?}`; sınama işi de aynı biçimdedir |
 | W → K | `result {replicaId, status, output, durationMs, impl?, loadMs?, fatal?}` |
 | W → K | `status {available}`: CPU sınırı ya da şarj koşulu nedeniyle ara verme |
 | K ↔ W | `ping` / `pong {t}` |
 | W → K | `bye {reason?}` |
 
-Şemaya uymayan her mesaj bağlantıyı `1008` koduyla kapatır ve kayda geçer. `missedHeartbeats × heartbeatMs` süre ses gelmezse kopya `LOST` olur, süre sınırı aşılırsa `TIMED_OUT` olur; iki durumda da yerine yeni bir kopya açılır.
+Şemaya (`shared/schemas/messages.v0.schema.json`) uymayan mesaj bağlantıyı `1008` ile kapatır. `missedHeartbeats × heartbeatMs` süre ses gelmezse kopya `LOST`, süre sınırı aşılırsa `TIMED_OUT` olur; ikisinde de yerine yeni kopya açılır.
 
-### Gönüllü sayfası URL parametreleri
+## Gönüllü sayfası
 
-| Parametre | Açıklama |
+`volunteer.html` onay ekranıyla açılır: görevlerin ne olduğu ve neyin kaydedildiği yazılıdır; CPU kullanımı, "mobilde yalnızca şarjdayken" ve isteğe bağlı Solana Devnet ödeme adresi seçilir. Worker kimliği ve ödeme adresi tarayıcının `localStorage`'ında, itibar koordinatörün veritabanında tutulur.
+
+| URL parametresi | Açıklama |
 |---|---|
 | `coordinator=ws://…/ws` | Varsayılan: sayfanın sunulduğu adres |
 | `cpu=low\|medium\|high` | Görevler arası 5 sn / 1 sn / 0 ara |
-| `impl=js` | WASM yerine saf JS (karşılaştırma ve WASM'siz test için) |
+| `impl=js` | WASM yerine saf JS |
+| `wallet=<adres>` | Ödeme adresi (onay ekranındaki alanla aynı) |
 | `autostart=1` | Onay ekranını atlar; **yalnızca araştırmacının kendi cihazlarında** deney için |
 | `fault=random\|collude&s=0.2` | Deney modu: `s` olasılıkla kasıtlı yanlış sonuç (biçim gerçek çıktıyla aynı) |
 
-### Simülatör ve ortak analiz
+**On-off saldırgan.** Dürüst çalışıp güvenilir olmuş bir sekme aynı adreste `fault=random&s=1` ile yeniden açılırsa aynı kimlik ve itibarla hile yapmaya başlar: sonuçları tek kopyayla kabul edilir, ilk sınama işinde yakalanır ve bitmemiş işlerdeki tek kopyalı sonuçları geriye dönük iptal edilip yeniden hesaplanır.
+
+**Denenen cihazlar.** Chrome 155–157 ve Firefox 158–160 (macOS), Chrome 155–158 (Android 10). Telefonla uçtan uca deneme (23 Kasım 2026): Android 10 / Chrome 158, aynı Wi-Fi'daki koordinatöre bağlanıp `single-task` ve 7 görevli `image-pipeline` işlerini tamamladı; yedi çıktı bağımsız hesaplamayla eşleşti. Safari/iOS denenmedi.
+
+## Doğrulama ve itibar
+
+Koordinatör (`coordinator/src/strategies.ts`, `reputation.ts`) ve simülatör aynı stratejileri uygular; iki taraf `shared/test/strategy-scenarios.json` ve `shared/test/reputation-vectors.json` ortak senaryolarını geçer. Parametreler `shared/config`'tedir (Kapsam v3).
+
+- **İtibar:** Beta modeli, R = (α+1)/(α+β+2), unutma katsayısı λ. Replikasyonla doğrulanan her kopya ve her sınama işi `rep_events` tablosuna yazılır. R eşiği (τ) ve yeterli gözlemi aşan worker güvenilir sayılır.
+- **Uyarlanabilir doğrulama (`adaptive`):** güvenilir worker'ın sonucu tek kopyayla kabul edilir; diğerleri eşleşen kopya gerektirir (en fazla `maxReplicas` = 10 kopya).
+- **Sınama işi:** her atamada q = 0,10 olasılıkla worker'a gerçek görev yerine aynı modülden, aynı boyutta, rastgele tohumlu bir görev gider; beklenen çıktıyı koordinatör Node'da aynı WASM ile (derlenmemişse saf JS ile) hesaplar (`oracle.ts`). Sınama işi gerçek görevden ayırt edilemez.
+- **Geriye dönük iptal:** sınamada yakalanan worker'ın bitmemiş işlerdeki tek kopyalı kabulleri ve onlara bağlı alt görevler yeniden kuyruğa alınır (`log` → `retroactive_cancel`). Bitmiş işlerdeki sonuçlar geri alınamaz, ayrıca sayılır (`late_detection`).
+
+## Ödemeler
+
+Ayrıntılı Devnet kurulumu (anahtarlar, faucet, imzalar): [`payments/x402-proto/README.md`](payments/x402-proto/README.md). Anahtarlar yalnızca `payments/x402-proto/.env`'de durur; depoya girmez.
+
+### İş satın alma (x402)
+
+`PAYMENTS=1` ile `POST /jobs` x402 ödemesinin arkasına alınır (`coordinator/src/api/payments.ts`). Alıcı işi gönderirken **üst sınırı** öder (`exact` şeması, Devnet USDC); iş bitince gerçekleşen maliyet hesaplanır, fark iade edilir.
+
+- Üst sınır = p × N × maxReplicas / (1 − q) (sınama işli stratejiler) ya da p × N × maxReplicas; p = 0,001 USDC, N görev sayısı. Örnek: 7 görevli `image-pipeline`, `adaptive` → 0,077778 USDC.
+- Sıra: DAG ve stratejiler doğrulanır (geçersizse 400, ödeme istenmez) → 402 → ödeme zincirde **kesinleşir** → iş kuyruğa girer. Ödeme imzası tutara bağlıdır; aynı ödemenin tekrarı reddedilir.
+- Emanet defteri `jobs` tablosunda: `quote_cap`, `payment_tx`, `payer`, `paid_at`, `realized_cost`, `refund_due`, `refund_tx`.
+
+```bash
+PAYMENTS=1 npm run coordinator
+npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --quote                     # yalnızca teklif
+npm run submit -- shared/examples/image-pipeline.json --verifier adaptive --pay --max-usdc 0.1 --wait
+```
+
+İstemci politikası yalnızca Devnet'te, yalnızca Devnet USDC ile ve en fazla `--max-usdc` öder. `--replay` aynı ödeme başlığını yeniden gönderip reddedildiğini gösterir. Devnet kayıtları: `job_336a3fe8` (ödemeli iş) ve `job_f8600908` (tekrarın reddi), 23 Kasım 2026.
+
+### Worker ödemeleri ve iade
+
+Ödenmiş bir iş **kesinleşince** (bitti ve ona yansıtılan sınama işleri sonuçlandı) koordinatör bir ödeme planı çıkarır (`coordinator/src/payouts.ts`, `payouts` tablosu): her worker'a doğrulanmış kopyaları ve geçtiği sınama işleri kadar birim ücret, alıcıya üst sınır − gerçekleşen maliyet. Kalemlerin toplamı ödenen üst sınıra eşittir. Ödeme adresi vermemiş worker'ın kalemi `no_wallet` kalır.
+
+`PAYOUTS=1` ile plan platform cüzdanından **tek Solana işleminde** toplu USDC transferiyle gönderilir; alıcının token hesabı yoksa açılır (`coordinator/src/solana-chain.ts`). Çift ödemeye karşı (iş, tür, alıcı) tekildir, işlem imzası yayından önce kaydedilir ve yalnızca zincire hiç girmediği kesinleşen ya da zincirde hata veren işlem yeniden imzalanır (en fazla 3 deneme).
+
+```bash
+HOST=0.0.0.0 PAYMENTS=1 PAYOUTS=1 npm run coordinator   # PLATFORM_PRIVATE_KEY .env'de; platform adresinde biraz Devnet SOL gerekir
+```
+
+**Devnet kaydı (26 Kasım 2026).** `job_84adbcea` (CLI) ve `job_22616c0d` (MCP üzerinden `mcp-agent`): her iş için iki worker ödemesi ve alıcı iadesi tek işlemde zincirde kesinleşti (`3HdPcv1G…`, `3qLUkWhz…`). İkinci işte iki tarayıcı da güvenilir olduğundan bazı görevler tek kopyayla kabul edildi; gerçekleşen maliyet 0,016'dan 0,011 USDC'ye düştü. Ayrıntılar ve gezgin bağlantıları: [`payments/x402-proto/README.md`](payments/x402-proto/README.md).
+
+![Devnet: worker ödemeleri ve iade tek işlemde](docs/img/devnet-payout.png)
+
+## MCP sunucusu
+
+`coordinator/src/mcp/server.ts`, HTTP API'nin üstünde ince bir MCP adaptörüdür; koordinatöre yeni mantık eklemez. stdio ile ayrı süreç olarak çalışır.
+
+| Araç | Ne yapar |
+|---|---|
+| `list_modules` | WASM modülleri, özetleri, örnek DAG adları ve DAG biçimi |
+| `get_quote` | DAG + strateji için üst sınır (USDC); iş oluşturmaz |
+| `submit_workflow` | İşi gönderir; **ücretli** (x402) |
+| `get_status` | Görev sayıları, süre, defter ve worker ödemeleri; hemen döner |
+| `get_result` | İş bitince çıktılar ve doğrulama bilgisi; **MCP Tasks** destekli, görev isteği olmadan çağrılırsa iş bitene kadar bekler |
+
+**Ödeme:** x402 v2'nin MCP taşıması. Ödemesiz `submit_workflow` çağrısı `isError: true` ve `structuredContent` = PaymentRequired döner; istemci aynı çağrıyı `params._meta["x402/payment"]` ile tekrarlar; kesinleşme bilgisi `_meta["x402/payment-response"]`'tadır. Adaptör ödemeyi `PAYMENT-SIGNATURE` başlığıyla `POST /jobs`'a iletir; doğrulama, üst sınır + iade ve tekrar koruması HTTP yoluyla aynıdır.
+
+```bash
+npm run -s mcp            # stdio MCP sunucusu (COORDINATOR_URL, varsayılan http://127.0.0.1:8787)
+npm run mcp-agent -- shared/examples/image-pipeline.json --verifier adaptive --max-usdc 0.1   # ödemeli uçtan uca örnek ajan (Devnet)
+```
+
+### Harici istemciler
+
+**Claude masaüstü.** Yapılandırmayı bu bilgisayarın yollarıyla yazdırın; Claude → Ayarlar → Geliştirici → "Yapılandırmayı düzenle" ile açılan `claude_desktop_config.json`'a ekleyin (dosyadaki diğer ayarlara dokunmadan, en üste `"mcpServers"` girdisi olarak) ve uygulamayı Cmd+Q ile kapatıp açın:
+
+```bash
+npm run -s mcp-config     # node'un tam yolunu kullanır; Claude masaüstü terminalin PATH'ini (nvm, Homebrew) görmez
+```
+
+```json
+{ "mcpServers": { "gonullu-hesaplama": {
+    "command": "/…/bin/node",
+    "args": ["--disable-warning=ExperimentalWarning", "/Users/<kullanıcı>/wasm-worker-proto/coordinator/src/mcp/stdio.ts"],
+    "env": { "COORDINATOR_URL": "http://127.0.0.1:8787" } } } }
+```
+
+Claude masaüstü x402 ödemesini kendisi yapmaz; ödemesiz koordinatörle bütün araçlar kullanılabilir, ödemeli akış `mcp-agent` ile gösterilir.
+
+**MCP Inspector** (MCP'nin resmî test aracı; araçları tarayıcıda elle çağırır):
+
+```bash
+npm run mcp-inspector     # http://127.0.0.1:6274 açılır → Connect → Tools
+```
+
+"Edit as JSON" kutusuna aracın tüm girdisi yazılır, ör. `get_quote` için `{"dag": {…}, "verifier": "adaptive"}`, `get_result` için `{"jobId": "job_…"}`.
+
+**Denemeler (25 Kasım 2026, ödemesiz koordinatör, iki gönüllü tarayıcı: Firefox + Chrome).**
+- *MCP Inspector v2.13.0:* beş araç listelendi; `get_quote` → `submit_workflow` → `get_result` ile `job_83bfe3eb` (three-task-dag, adaptive) tamamlandı: 3/3 görev kabul, 1 sınama işi.
+- *Claude masaüstü:* doğal dil isteğiyle ("modülleri listele, teklif al, işi gönder, sonucu getir") Claude araçları kendisi sırayla çağırdı; `job_1f2cfc32` (3 görev, adaptive) 3,4 sn'de tamamlandı, her görev 2 eşleşen kopyayla doğrulandı, teklif üst sınırı 0,033334 USDC.
+
+![MCP Inspector: get_result sonucu](docs/img/mcp-inspector.png)
+
+## Demo araçları
+
+### Demo paneli
+
+Koordinatör çalışırken **http://127.0.0.1:8787/panel**: terminal yerine tek ekranda canlı demo.
+
+- **Alıcı:** örnek DAG (ara demo için `demo-40.json`, 40 görev) ve doğrulama stratejisi seçilir; "Teklif al" üst sınırı formülüyle gösterir, "Öde ve gönder" x402 adımlarını sırayla gösterir: 402 → imza → zincirde kesinleşme (Solana gezgini bağlantısıyla).
+- **İş:** görev grafiği canlı; her görevin durumu ve kaç eşleşen kopyayla (ya da tek kopyayla) kabul edildiği; iş bitince emanet defteri ve worker ödemeleri.
+- **Tarayıcılar:** bağlı her tarayıcı, o anki görevi ya da sınama işi, itibar çubuğu (τ çizgisiyle), "tek kopya" ve "yakalandı" rozetleri.
+- **Olaylar:** bağlanma, ödeme, sınama, uyuşmazlık, tek kopya moduna geçiş, geriye dönük iptal, iş sonu.
+
+Alıcı anahtarı (`BUYER_PRIVATE_KEY`) yalnızca koordinatörün makinesindeki `.env`'de kalır; panel ödemeyi `POST /demo/buy` ile ister ve bu uç nokta yalnızca aynı makineden gelen isteği kabul eder. `HOST=0.0.0.0` verilirse panelin üstünde gönüllü sayfasının yerel ağ adresi görünür.
+
+```bash
+HOST=0.0.0.0 PAYMENTS=1 npm run coordinator     # sonra tarayıcıda /panel
+```
+
+### Görsel simülasyon
+
+`docs/demo/simulasyon.html` simülatörün bir koşusunu tarayıcıda adım adım oynatır; sunucu gerektirmez (dosyayı çift tıklayıp açmak yeter). Aynı tohumla sabit 2'li ve uyarlanabilir doğrulama yan yana oynar: 16 tarayıcının görevi, itibarı ve tek kopya modu; 10 DAG'in görev durumları; yakalanma ve tamamlanma olayları; maliyet ve yanlış kabul sayaçları. "Gerçeği göster" hatalı tarayıcıları ve kabul edilmiş yanlış sonuçları işaretler. İki senaryo: colluding ve rastgele hata (f = %20, s = 1).
+
+```bash
+cd sim && python -m vcsim.replay              # docs/demo/replay-data.js'i yeniden üretir (tohum 3)
+```
+
+Sayfa tek bir koşuyu gösterir; stratejilerin istatistiksel karşılaştırması 30 tohumluk deneylerle yapılır (`docs/figures/hafta8/`).
+
+## Simülatör
+
+`sim/vcsim`, koordinatörle aynı sözleşme ve strateji anlamlarıyla çalışan bir SimPy simülatörüdür: worker oturumları ve kopmalar, hız dağılımı, hata modelleri (rastgele, colluding), itibar, sınama işi, maliyet.
 
 ```bash
 cd sim
-python -m vcsim.run --seed 1                                     # 20 DAG × 50 görev, 50 worker
+python -m vcsim.run --seed 1                                      # 20 DAG × 50 görev, 50 worker
 python -m vcsim.run --seed 1 --set faults.f=0.2 --set workers.session_mean_s=60
 python -m vcsim.analyze ../experiments/data/sim/default-s1 ../coordinator/coordinator.db
 ```
 
-`vcsim.analyze`, simülatör çıktısı ile koordinatörün SQLite kaydını **aynı metrik koduyla** okur: makespan, iş başına maliyet, görev ve iş düzeyinde hatalı sonuç oranı, kayıp ve zaman aşımı sayıları. Koordinatör kaydındaki doğru sonuç Python referansıyla hesaplanır.
+`vcsim.analyze` simülatör çıktısını ve koordinatörün SQLite kaydını **aynı metrik koduyla** okur: makespan, iş başına maliyet, görev ve iş düzeyinde hatalı sonuç oranı, kayıp ve zaman aşımı sayıları.
 
-### x402 prototipi
+## WASM görev çekirdeği
 
-Bkz. [`payments/x402-proto/README.md`](payments/x402-proto/README.md): Solana Devnet üzerinde `402 → ödeme → 200` döngüsü, istemci harcama politikası ve Devnet'te elle çalıştırma adımları.
+Projenin başlangıç noktası: Web Worker içinde Rust/WASM görevleri çalıştıran, belirlenimci bir prototip. `index.html` bu çekirdeği tek başına dener (görev çalıştırma, test vektörlerini doğrulama, WASM–JS ölçümü):
 
-## Görev arayüzü ve mesaj protokolü
+```bash
+npm run build && npm run serve     # http://localhost:8080 (WASM file:// ile çalışmaz)
+```
 
-**Ana sayfa → worker**
+### Görev arayüzü
 
-| Alan | Tür | Açıklama |
-|---|---|---|
-| `taskId` | sayı | İstek–yanıt eşleştirme anahtarı |
-| `module` | metin | `"sha_chain"`, `"matmul"` (ve test için `"debug_panic"`) |
-| `input` | metin | Görevin JSON girdisi |
-| `impl` | metin, isteğe bağlı | `"wasm"` (varsayılan) veya `"js"` |
+Her görev `run(input_json: &str) -> String` imzasını taşır; çıktı kanonik JSON'dur (anahtarlar sıralı, boşluksuz), böylece sonuçlar bayt düzeyinde karşılaştırılabilir. Rust tarafı `run_task(module, input_json)` olarak dışa aktarılır. Worker ES modülü olarak çalışır ve WASM'ı ilk görevde tembel yükler; yükleme hatası, panic ve zaman aşımı görevin hatası olarak döner, panic sonrası worker yeniden başlatılır.
 
-**Worker → ana sayfa**
+| Sayfa → worker | Worker → sayfa |
+|---|---|
+| `taskId`, `module`, `input` (JSON metni), `impl?` (`wasm` \| `js`) | `taskId`, `status` (`ok` \| `error`), `output`, `durationMs`, `impl`, `loadMs?` (ilk WASM görevi), `fatal?` (panic) |
 
-| Alan | Tür | Açıklama |
-|---|---|---|
-| `taskId` | sayı | İsteğin `taskId` değeri |
-| `status` | `"ok"` \| `"error"` | Sonuç durumu |
-| `output` | metin | `ok` ise kanonik çıktı JSON'u, `error` ise hata iletisi |
-| `durationMs` | sayı | Yalnızca hesaplama süresi (WASM yükleme hariç) |
-| `impl` | metin | Kullanılan uygulama |
-| `loadMs` | sayı, isteğe bağlı | WASM yükleme süresi (yalnızca ilk WASM görevinde) |
-| `fatal` | bool, isteğe bağlı | `WebAssembly.RuntimeError` (panic) ise `true`; sayfa worker'ı yeniden başlatır |
+### Görevler
 
-Rust tarafı `run_task(module, input_json)` olarak dışa aktarılır ve her görev modülü `run(&str) -> String` ile `try_run(&str) -> Result<String, String>` sunar.
+| Görev | Girdi | Tanım | Çıktı |
+|---|---|---|---|
+| `sha_chain` | `{"seed": "<metin>", "iterations": 1..=100000000}` | `h0 = SHA-256(seed)`, `h_i = SHA-256(h_{i-1})` | `{"hash","iterations"}` |
+| `matmul` | `{"seed": <u32>, "n": 1..=512}` | A, B (n×n `u32`) `mulberry32` ile; `C = A·B mod 2^32`; C'nin little-endian baytlarının SHA-256'sı | `{"hash","n","seed"}` |
+| `image_blur` | `{"seed": <u32>, "w","h": 1..=1024, "passes": 1..=16}` | `mulberry32` ile gri tonlu `u8` görüntü; 3×3 kutu bulanıklaştırma (toplam / 9, kenarda kıstırma) `passes` kez; son görüntünün SHA-256'sı | `{"h","hash","passes","seed","w"}` |
 
-## Görevler
+`debug_panic` yalnızca test içindir. Görev maliyetleri `shared/config` → `costFunctions`.
 
-### `sha_chain`
+### Belirlenimcilik ve test vektörleri
 
-- **Girdi:** `{"seed": "<metin>", "iterations": 1..=100000000}`
-- **Tanım:** `h0 = SHA-256(UTF-8(seed))`, `h_i = SHA-256(h_{i-1})`; `iterations = 1` ise çıktı `SHA-256(seed)`'dir.
-- **Çıktı:** `{"hash":"<hex>","iterations":<n>}`
-
-### `matmul`
-
-- **Girdi:** `{"seed": <u32>, "n": 1..=512}`
-- **Tanım:** A ve B (n×n, `u32`), `mulberry32` PRNG ile satır sırasıyla (önce A, sonra B) üretilir; `C = A·B mod 2^32`. Çıktı, C'nin satır sıralı, little-endian `u32` baytlarının SHA-256 özetidir.
-- **Çıktı:** `{"hash":"<hex>","n":<n>,"seed":<seed>}`
-
-## Belirlenimcilik ve test vektörleri
-
-Görevler yalnızca tamsayı ve bayt işlemleri kullanır. WebAssembly'de kayan nokta işlemlerinin NaN bit deseni belirsiz olabildiği için ([spesifikasyon notu](https://www.webassembly.org/docs/nondeterminism/)) kayan nokta bilinçli olarak dışarıda bırakılmıştır.
-
-Sabit vektörler `vectors.js` içindedir; beklenen değerler Rust'tan bağımsız olan `scripts/ref_vectors.py` (Python `hashlib`) ile üretilmiştir. Örnekler:
+Görevler yalnızca tamsayı ve bayt işlemleri kullanır; WebAssembly'de kayan nokta NaN bit deseni belirsiz olabildiği için ([spesifikasyon notu](https://www.webassembly.org/docs/nondeterminism/)) kayan nokta bilinçli olarak dışarıda bırakıldı. Sabit vektörler `vectors.js`'te; beklenen değerler Rust'tan bağımsız `scripts/ref_vectors.py` (Python `hashlib`) ile üretildi. 13 vektörün tamamı Chrome 157 (macOS), Firefox 160 (macOS) ve Chrome 158 (Android 10) üzerinde WASM ve saf JS ile eşleşti (23 Kasım 2026).
 
 | Görev | Girdi | `hash` |
 |---|---|---|
 | `sha_chain` | `{"seed":"hello","iterations":1}` | `2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824` |
 | `sha_chain` | `{"seed":"hello","iterations":1000}` | `f6eec10c841b542f37ffb4ca00f82c5b6b4b11b79636d20201078b667ac37159` |
 | `matmul` | `{"seed":42,"n":64}` | `21bfb70784701c76d11da1401dec6eb95c570e074e7a831c5ac69a56514433cb` |
+| `image_blur` | `{"seed":42,"w":64,"h":48,"passes":3}` | `3894adbe0c4011c6f5b7e8e3c248b1275401d8082f8cb5be5483e3bc5b488863` |
 
-Sekiz vektörün tamamı Chrome 155 (macOS), Firefox 158 (macOS) ve Chrome 155 (Android) üzerinde WASM ve saf JS ile aynı çıktıyı üretmiştir.
+### Performans (WASM–JS)
+
+Prototip sayfasındaki ölçüm her görevi WASM ve saf JS ile 5 kez çalıştırır (ilki ısınma) ve medyanı raporlar. SHA-256 zincirinde (200.000 iterasyon) JS/WASM süre oranı: Chrome 155 macOS ≈ 4,7×, Firefox 158 macOS ≈ 6,0×, Chrome 155 Android ≈ 7,5×. Bu, iki uygulama arasındaki bir karşılaştırmadır (JS tarafı optimize edilmemiş bir SHA-256); oran iş yüküne bağlıdır (matmul'da n büyüdükçe düşer) ve tarayıcıların `performance.now()` yuvarlaması nedeniyle kısa süreler güvenilir ölçülemez. Genel WASM–native karşılaştırması için Jangda vd., *Not So Fast* (USENIX ATC 2019).
 
 ## Testler
 
 ```bash
+npm run test:quick     # ağ ve WASM derlemesi gerektirmez: sözleşmeler, koordinatör, ödeme, simülatör
+npm run test:volunteer # gönüllü sayfası ↔ koordinatör, gerçek Chromium (pkg/ yoksa saf JS ile)
 npm run test:rust      # cargo test
 npm run test:vectors   # Node'da WASM ve JS çıktıları, vektörlere karşı
-npm run test:e2e       # Playwright ile başsız Chromium: vektörler, UI donmaması, panic ve toparlanma, benchmark
-npm run test:quick     # ağ ve WASM derlemesi gerektirmez: sözleşmeler, koordinatör, x402, simülatör
-npm run test:volunteer # gönüllü sayfası ↔ koordinatör, gerçek Chromium (pkg/ yoksa saf JS ile)
+npm run test:e2e       # başsız Chromium: vektörler, UI donmaması, panic ve toparlanma
 npm test               # hepsi (build dahil)
 ```
 
 | Paket | Test | Kapsam |
 |---|---|---|
-| `shared/` | 3 | Şemalar, örnekler, parametreler |
-| `coordinator/` | 18 | DAG doğrulama; tek görev, DAG, kopan/sessizleşen worker, zaman aşımı, panic, geçersiz mesaj, müsaitlik, statik sunum |
-| `test/volunteer-e2e.mjs` | 8 | Onay, tek görev, iki tarayıcıyla DAG, sekme kapanması, yeniden bağlanma, CPU sınırı, deney modu, panic |
-| `sim/` | 19 | Belirlenimcilik, makespan alt sınırı, f·s sağlaması, colluding, CRN, bağımlılık sırası, tespit gecikmesi, sütun uyumu, koordinatör kaydının analizi |
-| `payments/x402-proto` | 4 | 402 yanıtı ve `PAYMENT-REQUIRED` içeriği, geçersiz ödeme, istemci politikası |
+| `shared/` | 6 | Şemalar, örnekler, parametreler, mesaj sözleşmesi |
+| `coordinator/` | 108 | DAG, kopan/sessizleşen worker, zaman aşımı; stratejiler ve ortak senaryolar; itibar, sınama, geriye dönük iptal; x402 ödeme ve tekrar; worker ödemeleri, çift ödeme, başarısız transfer; MCP araçları ve uçtan uca senaryo |
+| `test/volunteer-e2e.mjs` | 14 | Gerçek tarayıcılar: onay, DAG, kopma ve yeniden bağlanma, CPU sınırı, deney modu (fixed2, colluding, adaptive sınama, on-off saldırgan), ödeme adresi |
+| `sim/` | 159 | Belirlenimcilik, stratejiler, itibar vektörleri, colluding, CRN, sütun uyumu, ortak analiz, görsel simülasyon verisi |
+| `payments/x402-proto` | 4 | 402 yanıtı, geçersiz ödeme, istemci politikası |
 
-CI (`.github/workflows/ci.yml`) her push ve PR'da iki iş çalıştırır: hızlı testler, ve WASM derlemesiyle Rust + tarayıcı testleri.
-
-- `test:e2e` bir Chromium gerektirir: `npx playwright install chromium` ya da `CHROMIUM_PATH=/yol/chrome npm run test:e2e`.
-- Uçtan uca test, uzun bir görev sürerken ana iş parçacığının yanıt verdiğini (en uzun kare aralığı < 250 ms) ve panic sonrası worker'ın toparlandığını doğrular.
-
-## Performans ölçümü
-
-Sayfadaki **WASM vs JS ölçümü** her görevi WASM ve saf JS ile 5 kez çalıştırır (ilk koşu ısınma olarak atılır) ve medyanı raporlar. Ölçülen görevler: `sha_chain` (200.000 iterasyon) ve `matmul` (n=384).
-
-Aynı SHA-256 zinciri üzerinde (200.000 iterasyon) JS/WASM süre oranı, test edilen cihazlarda:
-
-| Ortam | JS/WASM |
-|---|---|
-| Chrome 155, macOS (Intel) | ≈ 4,7× |
-| Firefox 158, macOS (Intel) | ≈ 6,0× |
-| Chrome 155, Android | ≈ 7,5× |
-
-**Yorumlarken dikkat:**
-
-- Bu bir *iki uygulama arasındaki* karşılaştırmadır. JS tarafı elle yazılmış, özel optimizasyon yapılmamış bir SHA-256'dır; sonuçlar WASM'in genel hızını temsil etmez. Genel WASM–native karşılaştırması için bkz. Jangda vd., *Not So Fast* (USENIX ATC 2019).
-- Oran iş yüküne ve boyuta bağlıdır. Matris çarpımında oran büyüklükle düşer: Node (V8) üzerinde yapılan bir denemede n=128'de ≈ 2,2×, n=384'te ≈ 1,3× ölçülmüştür.
-- Tarayıcılar `performance.now()` çözünürlüğünü kasıtlı olarak yuvarlar (özellikle Firefox). **Birkaç milisaniyelik süreler güvenilir ölçülemez**, bu yüzden benchmark yeterince uzun işler kullanır. Kendi cihazınızda yeniden ölçün.
-- Ölçümler tek makinede, tek oturumda yapılmıştır; istatistiksel bir değerlendirme değildir.
-
-## Tarayıcı desteği
-
-| Tarayıcı | Durum |
-|---|---|
-| Chrome 155 (macOS), Chrome 155 (Android) | Test edildi |
-| Firefox 158 (macOS) | Test edildi |
-| Safari / iOS | Test edilmedi |
-
-Module worker desteği gerekir; güncel Chrome, Firefox ve Safari sürümleri destekler. Eski tarayıcılar için `wasm-pack build --target no-modules` ve klasik worker (`importScripts`) kullanılabilir, ancak bu depoda uygulanmamıştır.
+CI (`.github/workflows/ci.yml`) her push ve PR'da iki iş çalıştırır: hızlı testler, ve WASM derlemesiyle Rust + tarayıcı testleri. Chromium yolu `CHROMIUM_PATH` ile verilebilir (`npx playwright install chromium`).
 
 ## Sorun giderme
 
 | Belirti | Neden ve çözüm |
 |---|---|
-| Sayfa açılıyor ama görevler çalışmıyor; konsolda CORS veya `file://` hatası | Sayfa `file://` ile açılmış. `npm run serve` ile `http://localhost:8080` kullanın. |
-| `404` ile `pkg/vc_tasks.js` bulunamıyor | `npm run build` çalıştırılmamış. |
-| "Incorrect response MIME type" ya da streaming compile uyarısı | Sunucu `.wasm` için `application/wasm` göndermiyor. Python `http.server` ve `npx serve` doğru gönderir. |
-| `Failed to construct 'Worker'` / "Cannot use import statement outside a module" | Tarayıcı module worker desteklemiyor; tarayıcıyı güncelleyin. |
-| Görev `unreachable` ile bitiyor | Rust panic (`panic = "abort"`). Konsolda panic iletisi görünür; sayfa worker'ı yeniden başlatır. `debug_panic` görevi bu yolu test eder. |
-| `wasm-pack build` ağ hatası veriyor | `wasm-opt` (binaryen) indirmesi `Cargo.toml`'da kapalıdır. Yine de hata alıyorsanız ağ ve proxy ayarlarını kontrol edin. |
-| LAN'daki telefondan açılmıyor | Telefon ve bilgisayar aynı ağda olmalı; `http://<bilgisayar-IP>:8080` kullanın (`https` değil), VPN'i ve güvenlik duvarını kontrol edin. |
+| İş RUNNING'de kalıyor | `adaptive`/`fixed2` ikinci kopyayı **başka** bir tarayıcıdan bekler. İkinci bir tarayıcıda gönüllü sayfasını açın (aynı tarayıcının sekmeleri tek worker sayılır). |
+| Claude masaüstünde MCP sunucusu başlamıyor | Yapılandırmada `"command": "node"` yazıyorsa nvm/Homebrew Node'u bulunamaz; `npm run -s mcp-config` çıktısındaki tam yolu kullanın. Uygulamayı Cmd+Q ile kapatıp açın. |
+| Inspector'da "Execute Tool" pasif ya da "iş bulunamadı: {…}" | "Edit as JSON" açıkken aracın tüm girdisi yazılır (`{"dag": …}`); kapalıyken `jobId` kutusuna yalnızca `job_…` yazılır. |
+| Inspector "Request timed out after 1m00s" | `get_result` iş bitene kadar bekler; önce `get_status` ile durumu görün ya da ⚙️ → Request timeout'u uzatın. |
+| Ödemeli koordinatör `.env`'i bulamıyor | Anahtarlar `payments/x402-proto/.env`'de olmalı; ayrıntı o klasörün README'sinde. |
+| `404` ile `pkg/vc_tasks.js` bulunamıyor | `npm run build` çalıştırılmamış (gönüllü sayfası bu durumda saf JS kullanır). |
+| Prototip sayfası `file://` ile açılmış, görevler çalışmıyor | `npm run serve` ile `http://localhost:8080` kullanın. |
+| Görev `unreachable` ile bitiyor | Rust panic; sayfa worker'ı yeniden başlatır. `debug_panic` bu yolu test eder. |
+| Telefondan bağlanılamıyor | Koordinatör `HOST=0.0.0.0` ile başlatılmalı; aynı ağ, `http://` (https değil), VPN ve güvenlik duvarı. |
 
 ## Proje yapısı
 
 ```
 wasm-worker-proto/
-├── Cargo.toml, src/            # Rust görevleri: lib.rs, sha_chain.rs, matmul.rs
-├── index.html, main.js         # WASM prototip sayfası (vektör ve benchmark düğmeleri)
-├── volunteer.html, volunteer.js  # gönüllü sayfası (koordinatöre bağlanır)
-├── worker-client.js            # WorkerClient: iki sayfanın ortak worker yöneticisi
-├── worker.js, js-baseline.js   # module worker ve saf JS sürümleri
-├── vectors.js, scripts/ref_vectors.py
-├── shared/                     # ortak sözleşme: schemas/, config/, examples/, test/
-├── coordinator/                # Node.js + TypeScript koordinatör
-│   ├── src/  coordinator.ts, strategies.ts, queue/dag.ts, ws/hub.ts, api/, db/, cli/
-│   └── test/ dag.test.ts, e2e.test.ts, fake-worker.ts
-├── sim/                        # SimPy simülatörü (vcsim) ve ortak analiz
-├── payments/x402-proto/        # x402 Devnet prototipi
-├── test/                       # node-vectors.mjs, e2e.mjs, volunteer-e2e.mjs
-├── docs/                       # yol haritası, haftalık raporlar
+├── Cargo.toml, src/              # Rust görevleri: sha_chain, matmul, image_blur
+├── volunteer.html, volunteer.js  # gönüllü sayfası
+├── panel.html                    # demo paneli (/panel)
+├── worker-client.js, worker.js, js-baseline.js   # ortak worker yöneticisi, module worker, saf JS
+├── index.html, main.js, vectors.js               # WASM prototip sayfası ve test vektörleri
+├── shared/                       # ortak sözleşme: schemas/, config/, examples/, test/
+├── coordinator/
+│   ├── src/  coordinator.ts, strategies.ts, reputation.ts, oracle.ts, payouts.ts, solana-chain.ts,
+│   │         api/ (http, payments, demo-buyer), mcp/ (server, stdio, scenario), cli/, queue/, ws/, db/
+│   └── test/
+├── sim/                          # SimPy simülatörü (vcsim), analiz, görsel simülasyon verisi
+├── payments/x402-proto/          # x402 Devnet prototipi ve ayarları (.env)
+├── test/                         # tarayıcı testleri (volunteer-e2e, e2e, node-vectors)
+├── docs/                         # ROADMAP, raporlar, figures/, demo/ (görsel simülasyon), img/
+├── scripts/ref_vectors.py
 └── .github/workflows/ci.yml
 ```
 
-## Sınırlılıklar ve yol haritası
+## Sınırlılıklar
 
-- ~~Koordinatör, WebSocket bağlantısı, DAG ve çoklu worker~~ → 7. haftada eklendi.
-- Doğrulama şimdilik yalnızca `accept_first` (güvensiz karşılaştırma tabanı); replikasyon, itibar ve sınama işi 8–9. haftalarda eklenecek. Deney modundaki test, bu doğrulayıcının yanlış sonucu kabul ettiğini gösteriyor.
-- Modüller şimdilik tek WASM paketine gömülü. Hedef: koordinatörün `.wasm` modüllerini özetleriyle sunması, worker'ın yüklemeden önce doğrulaması (DAG v0'daki `moduleHash` alanı bunun için ayrıldı).
-- Simülatördeki `base_rate` ve oturum süresi değerleri yer tutucudur; pilot tarayıcı ölçümleriyle (`durationMs`, `loadMs`) kalibre edilecek.
-- x402 prototipi ağ gerektirmeyen testlerle doğrulandı; Devnet'te gerçek ödeme elle yapılacak.
-- Güvenlik: görev girdileri worker'a açıktır (gizlilik/şifreli hesaplama kapsam dışıdır) ve ödeme yalnızca test ağında (Devnet) tasarlanmıştır.
+- Ödemeler yalnızca **Solana Devnet**'te (test USDC); birim ücret sabit 0,001 USDC.
+- Görev girdileri worker'a açıktır; gizlilik ve şifreli hesaplama kapsam dışıdır.
+- Modüller tek WASM paketinde; görevler paketin özetine (`moduleHash`) bağlanır, ayrı `.wasm` modülleri yoktur.
+- Sınama işi yakalaması olasılıksaldır: iş bitmeden yakalanmayan tek kopyalı yanlış sonuç geri alınamaz (`late_detection` olarak sayılır).
+- Simülatördeki hız ve oturum dağılımları gerçek tarayıcı ölçümleriyle kalibre edilecek.
+- Safari/iOS denenmedi.
+- Sıradaki işler (yapay zekâ ajanı, MCP `get_example` aracı, deney matrisi): [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Lisans
 
-MIT. Ayrıntılar için [`LICENSE`](LICENSE) dosyasına bakın. Kod, simülatör ve deney verisi bu depoda açık olarak yayımlanır.
+MIT. Ayrıntılar için [`LICENSE`](LICENSE). Kod, simülatör ve deney verisi bu depoda açık olarak yayımlanır.

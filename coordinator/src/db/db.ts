@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY, dag_json TEXT NOT NULL,
   strategy_sched TEXT, strategy_verif TEXT, status TEXT,
   submitted_at INTEGER, completed_at INTEGER,
-  quote_cap REAL, payment_tx TEXT, refund_tx TEXT
+  quote_cap REAL, payment_tx TEXT, refund_tx TEXT,
+  payer TEXT, paid_at INTEGER, realized_cost REAL, refund_due REAL
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, job_id TEXT NOT NULL, dag_task_id TEXT NOT NULL,
@@ -26,6 +27,20 @@ CREATE TABLE IF NOT EXISTS replicas (
   is_spotcheck INTEGER DEFAULT 0, expected_output TEXT, state TEXT,
   created_at INTEGER, assigned_at INTEGER, deadline_at INTEGER, returned_at INTEGER,
   output TEXT, duration_ms REAL, load_ms REAL, fatal INTEGER, paid INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS rep_events (
+  id INTEGER PRIMARY KEY, worker_id TEXT NOT NULL, replica_id INTEGER,
+  kind TEXT NOT NULL, alpha_after REAL, beta_after REAL, t INTEGER
+);
+-- 10. hafta: worker ödemeleri ve alıcı iadesi. (job_id, kind, payee) tekildir: aynı iş iki kez ödenmez.
+-- payee: worker kimliği ya da iade için 'payer'. status: pending | no_wallet | sent | confirmed | failed.
+-- tx_signature yayınlamadan ÖNCE yazılır (çökmeden sonra aynı işlemin durumu sorgulanır, yeniden imzalanmaz).
+CREATE TABLE IF NOT EXISTS payouts (
+  id INTEGER PRIMARY KEY, job_id TEXT NOT NULL, kind TEXT NOT NULL, payee TEXT NOT NULL,
+  recipient TEXT, units INTEGER, amount_atomic INTEGER NOT NULL, status TEXT NOT NULL,
+  tx_signature TEXT, blockhash TEXT, last_valid_height INTEGER, attempts INTEGER DEFAULT 0, error TEXT,
+  created_at INTEGER, updated_at INTEGER,
+  UNIQUE (job_id, kind, payee)
 );
 CREATE TABLE IF NOT EXISTS log (
   t INTEGER, level TEXT, event TEXT, detail TEXT
@@ -41,6 +56,15 @@ export class Db {
     this.raw = new DatabaseSync(path);
     this.raw.exec("PRAGMA journal_mode = WAL;");
     this.raw.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /** Eski veritabanı dosyalarına sonradan eklenen sütunları ekler (9. hafta: emanet defteri). */
+  private migrate(): void {
+    const have = new Set((this.raw.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
+    for (const [col, type] of [["payer", "TEXT"], ["paid_at", "INTEGER"], ["realized_cost", "REAL"], ["refund_due", "REAL"]]) {
+      if (!have.has(col)) this.raw.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${type}`);
+    }
   }
 
   insert(table: string, row: Row): void {
@@ -63,6 +87,11 @@ export class Db {
       const { id, first_seen: _f, ...rest } = row;
       this.update("workers", id, rest);
     } else this.insert("workers", row);
+  }
+
+  /** Değiştirilen satır sayısını döndürür (INSERT OR IGNORE ile tekillik denetimi için). */
+  run(sql: string, ...params: (string | number | null)[]): number {
+    return Number(this.raw.prepare(sql).run(...params).changes);
   }
 
   all(sql: string, ...params: (string | number)[]): Row[] {

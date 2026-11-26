@@ -37,7 +37,7 @@ export function attachHub(server: Server, coord: Coordinator): WebSocketServer {
         clearTimeout(helloTimer);
         workerId = coord.workerConnected(
           { send: (m) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m)), close: (c, r) => ws.close(c, r) },
-          msg as { workerId?: string; userAgent?: string; deviceClass?: string },
+          msg as { workerId?: string; userAgent?: string; deviceClass?: string; wallet?: string },
         );
         return;
       }

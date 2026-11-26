@@ -17,7 +17,7 @@ struct Input {
     n: usize,
 }
 
-fn mulberry32(state: &mut u32) -> u32 {
+pub(crate) fn mulberry32(state: &mut u32) -> u32 {
     *state = state.wrapping_add(0x6D2B_79F5);
     let mut t = *state;
     t = (t ^ (t >> 15)).wrapping_mul(t | 1);

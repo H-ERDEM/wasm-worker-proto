@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo paneli: tarayıcı tabanlı gönüllü hesaplama</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --hair: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+    --blue: #2a78d6; --blue-soft: #cde2fb; --violet: #6250d6; --good: #0ca30c; --good-text: #006300;
+    --critical: #d03b3b; --warning: #fab219; --serious: #ec835a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --hair: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+      --blue: #3987e5; --blue-soft: #184f95; --violet: #9085e9; --good-text: #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; padding: 16px 24px 8px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .join { color: var(--ink-2); }
+  .join b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .conn { font-size: 12.5px; color: var(--ink-2); }
+  .conn.off { color: var(--critical); font-weight: 600; }
+  main { display: grid; grid-template-columns: 340px minmax(0, 1fr) 360px; gap: 16px; padding: 8px 24px 24px; align-items: start; }
+  @media (max-width: 1200px) { main { grid-template-columns: 1fr 1fr; } .job { grid-column: 1 / -1; order: -1; } }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  section.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px; min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; display: flex; gap: 8px; align-items: baseline; }
+  .card h2 .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--surface); font-size: 12px; }
+  .card h2 .aside { margin-left: auto; font-size: 12.5px; font-weight: 400; color: var(--ink-2); }
+  label.f { display: block; font-size: 12px; color: var(--ink-2); margin: 10px 0 4px; }
+  select, input[type=number] { width: 100%; font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink); }
+  .seg { display: flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; background: none; color: var(--ink); padding: 6px 8px; font: inherit; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--axis); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .btn { border: 1px solid var(--axis); background: none; color: var(--ink); border-radius: 8px; padding: 8px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .quote { margin-top: 14px; border: 1px solid var(--hair); border-radius: 8px; padding: 10px 12px; }
+  .quote .big { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .quote .big small { font-size: 13px; font-weight: 400; color: var(--ink-2); }
+  .quote .formula { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12.5px; color: var(--ink-2); margin-top: 10px; }
+  ol.steps { list-style: none; margin: 14px 0 0; padding: 0; }
+  ol.steps li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 6px 0; border-top: 1px solid var(--hair); opacity: 0.35; }
+  ol.steps li.on { opacity: 1; }
+  ol.steps .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--axis); margin-top: 2px; display: grid; place-items: center; font-size: 11px; color: #fff; }
+  ol.steps li.on .dot { background: var(--good); border-color: var(--good); }
+  ol.steps li.bad .dot { background: var(--critical); border-color: var(--critical); }
+  ol.steps li.wait .dot { border-color: var(--blue); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  ol.steps .t { font-weight: 600; }
+  ol.steps .d { font-size: 12.5px; color: var(--ink-2); word-break: break-all; }
+  ol.steps a { color: var(--blue); }
+  .ledger { margin-top: 14px; }
+  .ledger .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--hair); margin: 8px 0; }
+  .ledger .bar i { display: block; height: 100%; }
+  .ledger table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .ledger td { padding: 3px 0; border-bottom: 1px solid var(--hair); }
+  .ledger td:last-child { text-align: right; font-weight: 600; }
+  .ledger .t.sub { margin-top: 12px; font-weight: 600; }
+  .ledger table.payouts td:nth-child(2) { text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .ledger table.payouts td.st { font-weight: 600; text-align: right; white-space: nowrap; padding-left: 10px; }
+  .ledger table.payouts td { vertical-align: top; padding: 5px 0; }
+  .ledger table.payouts .u { font-size: 11.5px; color: var(--ink-2); }
+  .ledger td.st.confirmed, .ledger td.st.confirmed a { color: var(--good-text); }
+  .ledger td.st.failed { color: var(--critical); }
+  .ledger td.st.no_wallet, .ledger td.st.pending { color: var(--ink-2); }
+  .ledger td.st.sent { color: var(--blue); }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .jobhead { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 10px; color: var(--ink-2); font-size: 13px; }
+  .jobhead b { color: var(--ink); font-size: 16px; }
+  .chip { font-size: 12px; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--axis); color: var(--ink-2); white-space: nowrap; }
+  .chip.RUNNING { border-color: var(--blue); color: var(--blue); }
+  .chip.COMPLETED { border-color: var(--good); color: var(--good-text); }
+  .chip.FAILED { border-color: var(--critical); color: var(--critical); }
+  .dag { overflow: auto; max-height: 520px; border: 1px solid var(--hair); border-radius: 8px; padding: 8px; }
+  .dag svg { display: block; }
+  .empty { color: var(--muted); padding: 40px 12px; text-align: center; }
+  .tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .tile { border: 1px solid var(--hair); border-radius: 8px; padding: 8px 10px; }
+  .tile .k { font-size: 11.5px; color: var(--ink-2); }
+  .tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .workers { display: grid; gap: 8px; }
+  .w { border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px; }
+  .w.busy { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+  .w.spot { border-color: var(--violet); background: color-mix(in srgb, var(--violet) 12%, transparent); }
+  .w.flash { border-color: var(--critical); background: color-mix(in srgb, var(--critical) 18%, transparent); }
+  .w .top { display: flex; gap: 8px; align-items: baseline; }
+  .w .name { font-weight: 600; }
+  .w .id { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .w .badges { margin-left: auto; display: flex; gap: 4px; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  .badge.trust { background: var(--good); color: #fff; }
+  .badge.caught { background: var(--critical); color: #fff; }
+  .badge.off { border: 1px solid var(--axis); color: var(--ink-2); }
+  .w .doing { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; min-height: 18px; }
+  .w.spot .doing { color: var(--violet); font-weight: 600; }
+  .w .rep { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .w .r { height: 6px; border-radius: 3px; background: var(--hair); overflow: hidden; position: relative; }
+  .w .r i { display: block; height: 100%; background: var(--ink-2); }
+  .w.trusted .r i { background: var(--good); }
+  .w .r .tau { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: 0.5; }
+  .events { grid-column: 1 / -1; }
+  ul.feed { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; font-size: 13px; }
+  ul.feed li { display: grid; grid-template-columns: 70px 14px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--hair); }
+  ul.feed .ft { color: var(--muted); font-variant-numeric: tabular-nums; }
+  ul.feed .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+  ul.feed .good .dot { background: var(--good); }
+  ul.feed .bad .dot { background: var(--critical); }
+  ul.feed .warn .dot { background: var(--warning); }
+  ul.feed .pay .dot { background: var(--blue); }
+  ul.feed .spot .dot { background: var(--violet); }
+  ul.feed .bad { color: var(--critical); }
+  ul.feed .key span:last-child { font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tarayıcı tabanlı gönüllü hesaplama · canlı demo</h1>
+  <div class="join" id="join"></div>
+  <div class="conn" id="conn">bağlanıyor…</div>
+</header>
+<main>
+  <section class="card buyer">
+    <h2><span class="n">1</span>Alıcı <span class="aside" id="buyerAddr"></span></h2>
+    <label class="f" for="example">İş (DAG)</label>
+    <select id="example"></select>
+    <label class="f">Doğrulama stratejisi</label>
+    <div class="seg" id="verifier">
+      <button data-v="fixed2">Sabit 2'li</button><button data-v="adaptive" aria-pressed="true">Uyarlanabilir</button><button data-v="fixed3">Sabit 3'lü</button>
+    </div>
+    <label class="f" for="budget">Bütçe (USDC)</label>
+    <input type="number" id="budget" min="0.001" step="0.01" value="0.1">
+    <div class="row2"><button class="btn" id="quoteBtn">Teklif al</button><button class="btn primary" id="payBtn">Öde ve gönder</button></div>
+    <div class="quote" id="quote" hidden></div>
+    <ol class="steps" id="steps" hidden></ol>
+    <div class="hint" id="buyerHint"></div>
+    <div class="ledger" id="ledger" hidden></div>
+  </section>
+
+  <section class="card job">
+    <h2><span class="n">2</span>İş <span class="aside" id="jobAside"></span></h2>
+    <div class="jobhead" id="jobHead"></div>
+    <div class="dag" id="dag"><div class="empty">Henüz iş yok. Soldan bir iş seçip teklif alın ve gönderin.</div></div>
+    <div class="tally" id="tally"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">3</span>Tarayıcılar <span class="aside" id="wCount"></span></h2>
+    <div class="workers" id="workers"><div class="empty">Bağlı tarayıcı yok. Gönüllü sayfasını açıp "Katılıyorum"a basın.</div></div>
+  </section>
+
+  <section class="card events">
+    <h2>Olaylar <span class="aside">koordinatörün kaydı, en yenisi üstte</span></h2>
+    <ul class="feed" id="feed"></ul>
+  </section>
+</main>
+
+<script>
+"use strict";
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const usdc = (atomic) => (atomic / 1e6).toLocaleString("tr-TR", { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+  const short = (s, n = 4) => (s && s.length > 2 * n + 1 ? `${s.slice(0, n)}…${s.slice(-n)}` : s || "");
+  const time = (t) => new Date(t).toLocaleTimeString("tr-TR", { hour12: false });
+  const STATE_TR = { WAITING: "bekliyor", READY: "hazır", RUNNING: "çalışıyor", ACCEPTED: "kabul", FAILED: "başarısız" };
+  const VERIF_TR = { fixed2: "sabit 2'li", fixed3: "sabit 3'lü", adaptive: "uyarlanabilir", accept_first: "accept_first" };
+  const TAU = 0.95;
+
+  let info = null, examples = [], dag = null, verifier = "adaptive", jobId = null, lastEvent = 0, jobDone = false;
+  let workers = [], names = {}, flash = {};
+
+  // ---------- Tarayıcı adları (user agent'tan) ----------
+  function browserName(w) {
+    const ua = w.userAgent || "";
+    const b = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : /HeadlessChrome|Node/.test(ua) ? "Headless" : "Tarayıcı";
+    const os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
+    return os ? `${b} · ${os}` : b;
+  }
+  function nameOf(id) { return names[id] || id; }
+  function rename(list) {
+    const count = {};
+    for (const w of list) { const n = browserName(w); count[n] = (count[n] || 0) + 1; }
+    const seen = {};
+    for (const w of list) {
+      const n = browserName(w);
+      seen[n] = (seen[n] || 0) + 1;
+      names[w.id] = count[n] > 1 ? `${n} ${seen[n]}` : n;
+    }
+  }
+
+  // ---------- Alıcı ----------
+  function selectedQuery() { return `?verifier=${encodeURIComponent(verifier)}`; }
+
+  async function loadExample() {
+    const name = $("example").value;
+    dag = await (await fetch(`/examples/${name}`)).json();
+    $("quote").hidden = true;
+  }
+
+  async function getQuote() {
+    const res = await fetch(`/quote${selectedQuery()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dag) });
+    const out = await res.json();
+    const box = $("quote");
+    box.hidden = false;
+    box.textContent = "";
+    if (!res.ok) { box.append(el("div", "", `Hata: ${out.error}`)); return null; }
+    const q = out.quote;
+    const div = q.spotCheckRate ? ` / (1 − ${q.spotCheckRate.toLocaleString("tr-TR")})` : "";
+    const big = el("div", "big");
+    big.append(`${Number(q.cap).toLocaleString("tr-TR", { minimumFractionDigits: 6 })}`, el("small", "", " USDC üst sınır"));
+    box.append(
+      big,
+      el("div", "formula", `${q.unitPriceAtomic / 1e6} USDC × ${q.tasks} görev × ${q.maxReplicas} kopya${div}`),
+      el("div", "formula", "Gerçek maliyet iş bitince hesaplanır; fark iade edilir."),
+    );
+    return q;
+  }
+
+  const STEP_DEFS = [
+    ["request", "İstek", "POST /jobs (ödemesiz)"],
+    ["payment_required", "402 Ödeme gerekli", ""],
+    ["signed", "Alıcı imzaladı", "PAYMENT-SIGNATURE başlığıyla yeniden gönderildi"],
+    ["settled", "Zincirde kesinleşti", ""],
+  ];
+  function renderSteps(steps, pending, error) {
+    const ol = $("steps");
+    ol.hidden = false;
+    ol.textContent = "";
+    const got = Object.fromEntries((steps || []).map((s) => [s.kind, s]));
+    const t0 = steps && steps.length ? steps[0].t : 0;
+    let waitingShown = false;
+    for (const [kind, title, base] of STEP_DEFS) {
+      const s = got[kind];
+      const li = el("li");
+      const dot = el("span", "dot");
+      const body = el("div");
+      body.append(el("div", "t", title));
+      const d = el("div", "d", base);
+      if (s) {
+        li.classList.add("on");
+        dot.textContent = "✓";
+        if (kind === "payment_required") d.textContent = `${usdc(s.detail.amountAtomic)} USDC · Devnet USDC → ${short(s.detail.payTo)}`;
+        if (kind === "settled") {
+          d.textContent = "";
+          const a = el("a", "", `${short(s.detail.transaction, 6)} ↗`);
+          a.href = `https://explorer.solana.com/tx/${s.detail.transaction}?cluster=devnet`;
+          a.target = "_blank"; a.rel = "noopener";
+          d.append("İşlem ", a, ` · iş ${s.detail.jobId}`);
+        }
+        if (kind !== "request") d.append(` · +${((s.t - t0) / 1000).toFixed(1)} s`);
+      } else if (pending && !waitingShown && !error) {
+        li.classList.add("wait"); waitingShown = true;
+      } else if (error && !waitingShown) {
+        li.classList.add("on", "bad"); dot.textContent = "✕"; d.textContent = error; waitingShown = true;
+      }
+      body.append(d);
+      li.append(dot, body);
+      ol.append(li);
+    }
+  }
+
+  async function pay() {
+    $("payBtn").disabled = true;
+    try {
+      if (!info.payment) {
+        const res = await fetch(`/jobs${selectedQuery()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dag) });
+        const out = await res.json();
+        if (res.ok) setJob(out.jobId); else $("buyerHint").textContent = `Hata: ${out.error}`;
+        return;
+      }
+      await getQuote();
+      renderSteps([{ kind: "request", t: Date.now(), detail: {} }], true);
+      const budget = Number($("budget").value);
+      const res = await fetch(`/demo/buy${selectedQuery()}&maxUsdc=${budget}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dag) });
+      const out = await res.json();
+      // Adımları kısa aralıklarla aç: gerçek kayıtlar, yalnızca gösterim sırayla.
+      for (let i = 1; i <= out.steps.length; i++) {
+        renderSteps(out.steps.slice(0, i), i < out.steps.length || !out.ok, i === out.steps.length && !out.ok ? out.error : null);
+        await new Promise((r) => setTimeout(r, 450));
+      }
+      if (out.ok) setJob(out.jobId);
+    } finally {
+      $("payBtn").disabled = !canPay();
+    }
+  }
+
+  function canPay() { return !info.payment || info.buyerAvailable; }
+
+  function setJob(id) {
+    if (id === jobId) return;
+    jobId = id; jobDone = false;
+    $("ledger").hidden = true;
+  }
+
+  // ---------- İş (DAG çizimi) ----------
+  function drawDag(job) {
+    const box = $("dag");
+    const tasks = job.tasks;
+    const level = {};
+    for (const t of tasks) level[t.id] = t.deps.length ? 1 + Math.max(...t.deps.map((d) => level[d] ?? 0)) : 0;
+    const cols = {};
+    for (const t of tasks) (cols[level[t.id]] ||= []).push(t);
+    // Büyük işlerde (ör. 40 görev) sıkı yerleşim; çizim kutuya sığacak şekilde ölçeklenir.
+    const compact = tasks.length > 12;
+    const W = compact ? 104 : 150, H = compact ? 40 : 50, GX = compact ? 22 : 56, GY = compact ? 8 : 14, P = 8;
+    const nCols = Object.keys(cols).length, nRows = Math.max(...Object.values(cols).map((c) => c.length));
+    const width = P * 2 + nCols * W + (nCols - 1) * GX, height = P * 2 + nRows * H + (nRows - 1) * GY;
+    const pos = {};
+    for (const [lv, list] of Object.entries(cols)) {
+      const colH = list.length * H + (list.length - 1) * GY;
+      list.forEach((t, i) => { pos[t.id] = { x: P + Number(lv) * (W + GX), y: P + (height - 2 * P - colH) / 2 + i * (H + GY) }; });
+    }
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.style.maxWidth = "100%";
+    svg.style.height = "auto";
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "İşin görev grafiği");
+    const mk = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+    const css = getComputedStyle(document.documentElement);
+    const C = (v) => css.getPropertyValue(v).trim();
+    const defs = mk("defs", {});
+    const marker = mk("marker", { id: "arr", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "6", markerHeight: "6", orient: "auto-start-reverse" });
+    marker.append(mk("path", { d: "M0 0L10 5L0 10z", fill: C("--axis") }));
+    defs.append(marker); svg.append(defs);
+    for (const t of tasks) for (const d of t.deps) {
+      const a = pos[d], b = pos[t.id];
+      const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+      svg.append(mk("path", { d: `M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2 - 1} ${y2}`, fill: "none", stroke: C("--axis"), "stroke-width": "1.25", "marker-end": "url(#arr)" }));
+    }
+    for (const t of tasks) {
+      const p = pos[t.id];
+      const fill = { WAITING: "none", READY: C("--blue-soft"), RUNNING: C("--blue"), ACCEPTED: C("--good"), FAILED: C("--critical") }[t.state] || "none";
+      const onDark = t.state === "RUNNING" || t.state === "ACCEPTED" || t.state === "FAILED";
+      const g = mk("g", {});
+      g.append(mk("rect", { x: p.x, y: p.y, width: W, height: H, rx: 8, fill, stroke: fill === "none" ? C("--axis") : fill, "stroke-width": 1.25 }));
+      const ink = onDark ? "#ffffff" : C("--ink"), ink2 = onDark ? "#ffffff" : C("--ink-2");
+      const MOD = { sha_chain: "sha", matmul: "matmul", image_blur: "blur" };
+      g.append(mk("text", { x: p.x + 8, y: p.y + (compact ? 16 : 20), "font-size": compact ? 12 : 13, "font-weight": 600, fill: ink }, t.id));
+      g.append(mk("text", { x: p.x + W - 8, y: p.y + (compact ? 16 : 20), "font-size": 11, "text-anchor": "end", fill: ink2 }, compact ? MOD[t.module] || t.module : t.module));
+      let sub = STATE_TR[t.state] || t.state;
+      if (t.state === "ACCEPTED") sub = t.single ? (compact ? "✓ tek kopya" : "✓ tek kopyayla") : (compact ? `✓ ${t.agreeing} eşleşen` : `✓ ${t.agreeing} eşleşen kopya`);
+      else if (t.state === "RUNNING") sub = compact ? `${t.replicas} kopya` : `çalışıyor · ${t.replicas} kopya`;
+      g.append(mk("text", { x: p.x + 8, y: p.y + (compact ? 32 : 39), "font-size": compact ? 11 : 11.5, fill: ink2 }, sub));
+      const title = mk("title", {}, `${t.id} · ${t.module} · ${STATE_TR[t.state] || t.state}${t.output ? " · çıktı " + JSON.stringify(t.output) : ""}`);
+      g.append(title);
+      svg.append(g);
+    }
+    box.textContent = "";
+    box.append(svg);
+  }
+
+  function renderJob(job) {
+    const head = $("jobHead");
+    head.textContent = "";
+    const chip = el("span", `chip ${job.status}`, job.status === "RUNNING" ? "çalışıyor" : job.status === "COMPLETED" ? "tamamlandı" : "başarısız");
+    const elapsed = ((job.completedAt || Date.now()) - job.submittedAt) / 1000;
+    head.append(el("b", "", job.jobId), chip, el("span", "", `${VERIF_TR[job.verifier] || job.verifier} · ${job.scheduler}`), el("span", "", `${elapsed.toFixed(1)} s`));
+    if (job.clientJobId) head.append(el("span", "", job.clientJobId));
+    drawDag(job);
+    const acc = job.tasks.filter((t) => t.state === "ACCEPTED");
+    const tiles = [
+      ["Kabul edilen görev", `${acc.length} / ${job.tasks.length}`],
+      ["Tek kopyayla kabul", String(acc.filter((t) => t.single).length)],
+      ["Eşleşen kopya", String(acc.reduce((n, t) => n + t.agreeing, 0))],
+      ["Sınama işi", String(job.spotchecks)],
+    ];
+    const tally = $("tally");
+    tally.textContent = "";
+    for (const [k, v] of tiles) { const t = el("div", "tile"); t.append(el("div", "k", k), el("div", "v", v)); tally.append(t); }
+    renderLedger(job);
+  }
+
+  function renderLedger(job) {
+    const p = job.payment;
+    const box = $("ledger");
+    if (!p || p.capAtomic == null) { box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = "";
+    box.append(el("div", "t", "Emanet defteri"));
+    const done = p.realizedAtomic != null;
+    const bar = el("div", "bar");
+    if (done) {
+      const a = el("i"); a.style.width = `${(100 * p.realizedAtomic) / p.capAtomic}%`; a.style.background = "var(--blue)";
+      const b = el("i"); b.style.width = `${(100 * p.refundDueAtomic) / p.capAtomic}%`; b.style.background = "var(--good)";
+      bar.append(a, b);
+    }
+    const table = el("table");
+    const row = (k, v, sw) => { const tr = el("tr"); const td = el("td"); if (sw) { const s = el("span", "sw"); s.style.background = sw; td.append(s); } td.append(k); tr.append(td, el("td", "", v)); table.append(tr); };
+    row("Ödenen üst sınır", `${usdc(p.capAtomic)} USDC`);
+    row("Gerçekleşen maliyet", done ? `${usdc(p.realizedAtomic)} USDC` : "iş bitince", "var(--blue)");
+    row("İade edilecek", done ? `${usdc(p.refundDueAtomic)} USDC` : "iş bitince", "var(--good)");
+    box.append(bar, table);
+    // 10. hafta: ödemeler (worker'lara doğrulanmış iş başına, alıcıya iade) ve işlem bağlantıları.
+    const pays = p.payouts || [];
+    if (!pays.length) {
+      box.append(el("div", "hint", done ? "Ödeme planı iş kesinleşince çıkar (geç dönen sınama işleri beklenir)." : ""));
+      return;
+    }
+    const ST = { pending: "bekliyor", sent: "gönderildi", confirmed: "onaylandı", no_wallet: "adres yok", failed: "başarısız" };
+    const pt = el("table", "payouts");
+    for (const x of pays) {
+      const tr = el("tr");
+      const who = el("td");
+      who.append(x.kind === "refund" ? "Alıcıya iade" : nameOf(x.payee));
+      if (x.kind !== "refund") who.append(el("div", "u", `${x.units} doğrulanmış birim`));
+      const st = el("td", `st ${x.status}`);
+      if (x.transaction && x.status === "confirmed") {
+        const a = el("a", "", `${ST[x.status]} ↗`);
+        a.href = `https://explorer.solana.com/tx/${x.transaction}?cluster=devnet`;
+        a.target = "_blank"; a.rel = "noopener";
+        st.append(a);
+      } else st.textContent = ST[x.status] || x.status;
+      if (x.error) st.title = x.error;
+      tr.append(who, el("td", "", `${usdc(x.amountAtomic)}`), st);
+      pt.append(tr);
+    }
+    const sent = pays.some((x) => x.transaction);
+    box.append(el("div", "t sub", "Ödemeler (Devnet USDC)"), pt,
+      el("div", "hint", sent ? "Tüm ödemeler platform cüzdanından tek işlemde gönderilir." : "Gönderim kapalı ya da sırada (PAYOUTS=1 ile Devnet'e gönderilir)."));
+  }
+
+  // ---------- Tarayıcılar ----------
+  function renderWorkers(list) {
+    const box = $("workers");
+    $("wCount").textContent = `${list.length} bağlı`;
+    if (!list.length) { box.innerHTML = '<div class="empty">Bağlı tarayıcı yok. Gönüllü sayfasını açıp "Katılıyorum"a basın.</div>'; return; }
+    rename(list);
+    box.textContent = "";
+    const now = Date.now();
+    for (const w of [...list].sort((a, b) => nameOf(a.id).localeCompare(nameOf(b.id)))) {
+      const flashing = flash[w.id] && flash[w.id] > now;
+      const card = el("div", "w" + (w.trusted ? " trusted" : "") + (flashing ? " flash" : w.doing ? (w.doing.spot ? " spot" : " busy") : ""));
+      const top = el("div", "top");
+      top.append(el("span", "name", nameOf(w.id)), el("span", "id", w.id));
+      const badges = el("div", "badges");
+      if (w.trusted) badges.append(el("span", "badge trust", "tek kopya"));
+      if (w.caught) badges.append(el("span", "badge caught", w.caught > 1 ? `yakalandı ×${w.caught}` : "yakalandı"));
+      if (!w.available) badges.append(el("span", "badge off", "duraklatıldı"));
+      top.append(badges);
+      const doing = flashing ? "sınama işinde yakalandı" : w.doing ? (w.doing.spot ? "sınama işi (cevabı bilinen görev)" : `${w.doing.module} · ${w.doing.task}`) : "boşta";
+      const rep = el("div", "rep");
+      const r = el("div", "r");
+      const fill = el("i"); fill.style.width = `${(w.reputation * 100).toFixed(1)}%`;
+      const tau = el("span", "tau"); tau.style.left = `${TAU * 100}%`; tau.title = "τ = 0,95";
+      r.append(fill, tau);
+      rep.append(r, el("span", "", `R ${w.reputation.toFixed(3)} · α ${w.alpha.toFixed(1)} · β ${w.beta.toFixed(1)}`));
+      card.append(top, el("div", "doing", doing), rep);
+      box.append(card);
+    }
+  }
+
+  // ---------- Olaylar ----------
+  function describe(e) {
+    const d = e.detail || {};
+    switch (e.event) {
+      case "worker_connected": return ["good", `${nameOf(d.id)} bağlandı`];
+      case "worker_disconnected": return ["warn", `${nameOf(d.id)} ayrıldı`];
+      case "job_submitted": return ["", `${d.jobId} kuyruğa girdi: ${d.tasks} görev, ${VERIF_TR[d.verifier] || d.verifier}`];
+      case "job_paid": return ["pay", `${d.jobId} için ödeme kesinleşti: ${usdc(d.capAtomic)} USDC, işlem ${short(d.transaction, 6)}`];
+      case "payment_settle_failed": return ["bad", `ödeme kesinleşmedi: ${d.reason || d.message || ""}`];
+      case "spotcheck_assigned": return ["spot", `${nameOf(d.workerId)} bir sınama işi aldı (${d.module})`];
+      case "spotcheck_failed": return ["bad", `${nameOf(d.workerId)} sınama işinde yanlış sonuç verdi: yakalandı`];
+      case "result_mismatch": return ["bad", `${nameOf(d.workerId)} sonucu diğer kopyalarla uyuşmadı`];
+      case "worker_trusted": return ["good", `${nameOf(d.workerId)} tek kopya moduna geçti (R = ${Number(d.reputation).toFixed(3)})`];
+      case "worker_untrusted": return ["warn", `${nameOf(d.workerId)} tek kopya modundan çıktı`];
+      case "retroactive_cancel": return ["bad", `geriye dönük iptal: ${d.tasks.length} görev yeniden hesaplanacak (${nameOf(d.workerId)})`];
+      case "late_detection": return ["bad", `${nameOf(d.workerId)} bitmiş işte tek kopyayla kabul edilmiş sonuçlar içeriyor`];
+      case "job_finished": return [d.state === "COMPLETED" ? "good" : "bad", `${d.jobId} ${d.state === "COMPLETED" ? "tamamlandı" : "başarısız"}`];
+      case "payouts_planned": return ["pay", `${d.jobId}: ödeme planı çıktı (${d.rows} kalem)${d.chain === "on" ? "" : ", gönderim kapalı"}`];
+      case "payout_confirmed": return ["good", `ödemeler zincirde onaylandı: işlem ${short(d.signature, 6)}`];
+      case "payout_failed": return ["bad", `ödeme işlemi başarısız (${d.status})${d.retry ? ", yeniden denenecek" : ""}`];
+      case "task_failed": return ["bad", `görev başarısız: ${d.task}`];
+      case "replica_lost": return ["warn", `${nameOf(d.workerId)} bağlantıyı kaybetti; görev yeniden kuyruğa alındı`];
+      case "replica_timed_out": return ["warn", `${nameOf(d.workerId)} süre aşımı; görev yeniden kuyruğa alındı`];
+      default: return null; // ayrıntı olaylar (late_result, invalid_message …) panelde gösterilmez
+    }
+  }
+
+  const KEY_EVENTS = new Set(["spotcheck_failed", "retroactive_cancel", "late_detection", "job_paid", "job_finished", "worker_trusted"]);
+  function addEvents(rows) {
+    const ul = $("feed");
+    for (const e of rows) {
+      lastEvent = Math.max(lastEvent, e.id);
+      if (e.event === "job_submitted" && e.detail) setJob(e.detail.jobId);
+      if (e.event === "spotcheck_failed" && e.detail) flash[e.detail.workerId] = Date.now() + 2500;
+      const r = describe(e);
+      if (!r) continue;
+      // Art arda aynı olay (ör. hileli tarayıcının uyuşmazlıkları) tek satırda sayılır; önemli olaylar görünür kalır.
+      const top = ul.firstElementChild;
+      if (top && top.dataset.text === r[1]) {
+        const n = Number(top.dataset.n) + 1;
+        top.dataset.n = String(n);
+        top.querySelector(".ft").textContent = time(e.t);
+        top.lastChild.textContent = `${r[1]} (×${n})`;
+        continue;
+      }
+      const li = el("li", r[0] + (KEY_EVENTS.has(e.event) ? " key" : ""));
+      li.dataset.text = r[1];
+      li.dataset.n = "1";
+      li.append(el("span", "ft", time(e.t)), el("span", "dot"), el("span", "", r[1]));
+      ul.prepend(li);
+    }
+    while (ul.children.length > 150) ul.lastChild.remove();
+  }
+
+  // ---------- Yoklama döngüsü ----------
+  async function tick() {
+    try {
+      const [ws, ev] = await Promise.all([
+        fetch("/workers").then((r) => r.json()),
+        fetch(`/events?since=${lastEvent}`).then((r) => r.json()),
+      ]);
+      $("conn").textContent = "koordinatöre bağlı";
+      $("conn").className = "conn";
+      workers = ws;
+      rename(ws);
+      addEvents(ev);
+      renderWorkers(ws);
+      if (jobId && !jobDone) {
+        const job = await fetch(`/jobs/${jobId}`).then((r) => r.json());
+        if (job && job.jobId) {
+          renderJob(job);
+          const pays = job.payment?.payouts || [];
+          const settled = pays.length > 0 && pays.every((x) => ["confirmed", "no_wallet", "failed"].includes(x.status));
+          if (job.status !== "RUNNING" && (!job.payment || settled)) jobDone = true;
+        }
+      }
+    } catch {
+      $("conn").textContent = "koordinatöre ulaşılamıyor";
+      $("conn").className = "conn off";
+    }
+    setTimeout(tick, 500);
+  }
+
+  async function init() {
+    info = await (await fetch("/demo/info")).json();
+    examples = await (await fetch("/examples")).json();
+    const sel = $("example");
+    for (const e of examples) {
+      const o = el("option", "", `${e.name} · ${e.tasks} görev`);
+      o.value = e.name;
+      sel.append(o);
+    }
+    const preferred = examples.find((e) => e.name === "demo-40") || examples.find((e) => e.name === "image-pipeline");
+    if (preferred) sel.value = preferred.name;
+    await loadExample();
+    sel.onchange = loadExample;
+    for (const b of document.querySelectorAll("#verifier button")) {
+      b.onclick = () => {
+        verifier = b.dataset.v;
+        for (const x of document.querySelectorAll("#verifier button")) x.setAttribute("aria-pressed", String(x === b));
+        $("quote").hidden = true;
+      };
+    }
+    $("quoteBtn").onclick = getQuote;
+    $("payBtn").onclick = pay;
+    if (!info.payment) {
+      $("payBtn").textContent = "Gönder (ödemesiz)";
+      $("buyerHint").textContent = "Koordinatörde ödeme kapalı. Ödemeli demo için: PAYMENTS=1 npm run coordinator";
+      $("budget").disabled = true;
+    } else if (!info.buyerAvailable) {
+      $("buyerHint").textContent = info.buyer
+        ? "Ödeme yalnızca koordinatörün çalıştığı bilgisayardan yapılabilir (alıcı anahtarı orada)."
+        : "Alıcı anahtarı yok (payments/x402-proto/.env içinde BUYER_PRIVATE_KEY). Teklif alınabilir; ödeme CLI ile: npm run submit -- … --pay";
+    } else {
+      $("buyerAddr").textContent = `alıcı ${short(info.buyer)} · Devnet`;
+      $("buyerHint").textContent = `Ödeme platform adresine (${short(info.payment.payTo)}) Devnet USDC ile yapılır.`;
+    }
+    $("payBtn").disabled = !canPay();
+    const urls = info.volunteerUrls || [];
+    $("join").textContent = "";
+    if (urls.length) $("join").append("Gönüllü olmak için telefonda açın: ", el("b", "", urls.join("  ·  ")));
+    else $("join").append("Gönüllü sayfası: ", el("b", "", `${location.origin}/`));
+    tick();
+  }
+  init();
+})();
+</script>
+</body>
+</html>

@@ -9,7 +9,8 @@
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { max-width: 640px; margin: 2rem auto; padding: 0 16px; line-height: 1.45; }
     h1 { font-size: 1.3rem; }
-    button, select { font: inherit; }
+    button, select, input { font: inherit; }
+    #wallet { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px; font-family: ui-monospace, monospace; font-size: 13px; }
     button { padding: .55rem 1rem; cursor: pointer; }
     .card { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 1rem; margin-top: 1rem; }
     .muted { opacity: .75; font-size: .92rem; }
@@ -25,7 +26,7 @@
 
   <section id="consent" class="card">
     <p>Bu sayfa, bir dönem projesi kapsamında tarayıcınızın işlem gücünü küçük hesaplama görevleri
-      (SHA-256 zinciri, tamsayı matris çarpımı) için kullanır. Görevler tarayıcının izole Web Worker
+      (SHA-256 zinciri, tamsayı matris çarpımı, tamsayı görüntü filtresi) için kullanır. Görevler tarayıcının izole Web Worker
       ortamında çalışır; dosyalarınıza, kameranıza ya da kişisel verilerinize erişilmez.</p>
     <p class="muted">Sekmeyi kapattığınızda katılım sona erer. Görevlerin girdi ve çıktıları ile görev
       süreleri ve tarayıcı türünüz araştırma amacıyla kaydedilir.</p>
@@ -37,6 +38,10 @@
       </select>
     </label>
     <label><input type="checkbox" id="chargingOnly"> Mobilde yalnızca şarjdayken çalış</label>
+    <label>Ödeme adresi (isteğe bağlı): Solana Devnet cüzdanı
+      <input type="text" id="wallet" autocomplete="off" spellcheck="false" placeholder="ör. FKqF…eyrF">
+    </label>
+    <p class="muted" id="walletHint">Doğrulanan her sonuç için iş bitince test USDC (Devnet, gerçek para değil) bu adrese gönderilir. Boş bırakırsanız katılabilirsiniz, ödeme yapılmaz.</p>
     <p><button id="agree">Katılıyorum, başlat</button></p>
   </section>
 
@@ -48,6 +53,7 @@
       <dt>Tamamlanan</dt><dd id="done">0</dd>
       <dt>Son görev</dt><dd id="last">—</dd>
       <dt>Uygulama</dt><dd id="impl">—</dd>
+      <dt>Ödeme adresi</dt><dd id="walletShown">—</dd>
     </dl>
     <p><button id="stop">Durdur</button></p>
   </section>

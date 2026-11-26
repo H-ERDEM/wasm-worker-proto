@@ -23,15 +23,16 @@ from .rng import Streams
 from .workload import build_workload
 
 
-def simulate(cfg: dict, seed: int) -> tuple[dict, Recorder, dict]:
-    """Simülasyonu çalıştırır; (özet, kayıt, iş yükü bilgisi) döndürür."""
+def simulate(cfg: dict, seed: int, make_recorder=None) -> tuple[dict, Recorder, dict]:
+    """Simülasyonu çalıştırır; (özet, kayıt, iş yükü bilgisi) döndürür.
+    make_recorder(env) verilirse kayıt onunla oluşturulur (ör. vcsim.replay'in zaman çizelgesi)."""
     streams = Streams(seed)
     wl = dict(cfg["workload"])
     wl["dag_files"] = [str((REPO_ROOT / p) if not Path(p).is_absolute() else p) for p in wl.get("dag_files", [])]
     dags = build_workload(wl, streams["workload"])
 
     env = simpy.Environment()
-    rec = Recorder()
+    rec = make_recorder(env) if make_recorder else Recorder()
     coord = SimCoordinator(env, cfg, streams, rec)
     for _ in range(cfg["workers"]["initial"]):
         coord.add_worker()
@@ -59,6 +60,7 @@ def simulate(cfg: dict, seed: int) -> tuple[dict, Recorder, dict]:
         "workers_faulty": sum(w.faulty for w in coord.workers.values()),
         "sim_end_ms": round(float(env.now), 3),
         "timed_out": not coord.all_done.triggered,
+        **coord.stats,
     })
     return summary, rec, {"dags": dags, "workers": coord.workers}
 

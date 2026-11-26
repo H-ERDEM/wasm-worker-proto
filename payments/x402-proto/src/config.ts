@@ -23,6 +23,12 @@ export function requireEnv(name: string): string {
 }
 
 /** İstemci harcama politikası: yalnızca Devnet, yalnızca Devnet USDC, en fazla CLIENT_MAX_ATOMIC. */
-export function devnetPolicy<R extends { network: string; asset: string; amount: string }>(_version: number, reqs: R[]): R[] {
-  return reqs.filter((r) => r.network === SOLANA_DEVNET && r.asset === DEVNET_USDC_MINT && BigInt(r.amount) <= CLIENT_MAX_ATOMIC);
+export function devnetPolicy<R extends { network: string; asset: string; amount: string }>(version: number, reqs: R[]): R[] {
+  return devnetPolicyWithMax(CLIENT_MAX_ATOMIC)(version, reqs);
+}
+
+/** Aynı politika, verilen üst sınırla (iş ödemelerinde alıcının belirlediği bütçe). */
+export function devnetPolicyWithMax(maxAtomic: bigint) {
+  return <R extends { network: string; asset: string; amount: string }>(_version: number, reqs: R[]): R[] =>
+    reqs.filter((r) => r.network === SOLANA_DEVNET && r.asset === DEVNET_USDC_MINT && BigInt(r.amount) <= maxAtomic);
 }

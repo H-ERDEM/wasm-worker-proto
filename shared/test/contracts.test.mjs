@@ -23,6 +23,18 @@ test("parametre dosyası beklenen alanları ve kapsam dokümanındaki değerleri
   }
   assert.deepEqual(c.reputation, { tau: 0.95, alphaMin: 10, lambda: 0.99, w: 5 });
   assert.equal(c.spotCheckRate, 0.1);
+  assert.equal(c.maxReplicas, 10, "ROADMAP karar kaydı 2026-11-23");
+});
+
+test("itibar test vektörleri parametre dosyasıyla aynı parametreleri kullanır", () => {
+  const v = read("test/reputation-vectors.json");
+  assert.deepEqual(v.params, read("config/default.json").reputation);
+  const kinds = new Set(["match", "mismatch", "spot_pass", "spot_fail"]);
+  assert.ok(v.cases.length > 0);
+  for (const c of v.cases) {
+    assert.ok(c.events.every((e) => kinds.has(e)), `${c.name}: bilinmeyen olay`);
+    for (const k of ["alpha", "beta", "R", "trusted"]) assert.ok(k in c.expect, `${c.name}: eksik ${k}`);
+  }
 });
 
 test("mesaj şeması: geçerli worker mesajları kabul, bozuklar ret", () => {
@@ -32,6 +44,8 @@ test("mesaj şeması: geçerli worker mesajları kabul, bozuklar ret", () => {
   assert.ok(msgSchema({ type: "status", available: false }));
   assert.ok(!msgSchema({ type: "status" }), "available zorunlu");
   assert.ok(!msgSchema({ type: "hello", consent: false }), "onaysız hello reddedilmeli");
+  assert.ok(msgSchema({ type: "hello", consent: true, wallet: "FKqFgXvXGih6KDYsLSLNAk5WrANM68ZfgkfGUWmEeyrF" }), "cüzdan adresi isteğe bağlı");
+  assert.ok(!msgSchema({ type: "hello", consent: true, wallet: "0xabc" }), "base58 olmayan adres reddedilmeli");
   assert.ok(!msgSchema({ type: "result", replicaId: "x", status: "ok", output: "", durationMs: 1 }));
   assert.ok(!msgSchema({ type: "assign" }), "worker assign gönderemez");
 });

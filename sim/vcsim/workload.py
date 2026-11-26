@@ -20,7 +20,8 @@ class DagError(ValueError):
 
 
 def task_cost(task: dict) -> float:
-    """coordinator/src/queue/dag.ts taskCost ile aynı: sha_chain → iterations, matmul → n³."""
+    """coordinator/src/queue/dag.ts taskCost ile aynı: sha_chain → iterations, matmul → n³,
+    image_blur → w·h·passes."""
     if isinstance(task.get("cost"), (int, float)):
         return float(task["cost"])
     inp = task.get("input", {})
@@ -28,6 +29,8 @@ def task_cost(task: dict) -> float:
         return float(inp["iterations"])
     if task["module"] == "matmul" and isinstance(inp.get("n"), int):
         return float(inp["n"] ** 3)
+    if task["module"] == "image_blur" and all(isinstance(inp.get(k), int) for k in ("w", "h", "passes")):
+        return float(inp["w"] * inp["h"] * inp["passes"])
     return 1.0
 
 

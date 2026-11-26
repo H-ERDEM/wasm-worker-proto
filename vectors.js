@@ -41,4 +41,29 @@ export const VECTORS = [
     input: "{\"seed\":4294967295,\"n\":100}",
     expected: "{\"hash\":\"3049e408e7397b82fdd6f7917489d516cb4b65adbe608bbb4776b5e05c0378a7\",\"n\":100,\"seed\":4294967295}",
   },
+  {
+    module: "image_blur",
+    input: "{\"seed\":0,\"w\":1,\"h\":1,\"passes\":1}",
+    expected: "{\"h\":1,\"hash\":\"3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d43\",\"passes\":1,\"seed\":0,\"w\":1}",
+  },
+  {
+    module: "image_blur",
+    input: "{\"seed\":42,\"w\":8,\"h\":8,\"passes\":1}",
+    expected: "{\"h\":8,\"hash\":\"5870cb5633065f4a14668b74c118c18d934ed33460b3310dbc7d10af6f3da7fe\",\"passes\":1,\"seed\":42,\"w\":8}",
+  },
+  {
+    module: "image_blur",
+    input: "{\"seed\":42,\"w\":64,\"h\":48,\"passes\":3}",
+    expected: "{\"h\":48,\"hash\":\"3894adbe0c4011c6f5b7e8e3c248b1275401d8082f8cb5be5483e3bc5b488863\",\"passes\":3,\"seed\":42,\"w\":64}",
+  },
+  {
+    module: "image_blur",
+    input: "{\"seed\":4294967295,\"w\":100,\"h\":1,\"passes\":2}",
+    expected: "{\"h\":1,\"hash\":\"1bee202d14ca061c4e28f9c353cbed38836c986cd98de7598aff807da5e0296b\",\"passes\":2,\"seed\":4294967295,\"w\":100}",
+  },
+  {
+    module: "image_blur",
+    input: "{\"seed\":7,\"w\":1,\"h\":50,\"passes\":16}",
+    expected: "{\"h\":50,\"hash\":\"cf658d4ac50c2ce22d6e13c28115149c8229757799ca700181bf2961b7f9b718\",\"passes\":16,\"seed\":7,\"w\":1}",
+  },
 ];
