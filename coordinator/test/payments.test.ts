@@ -239,6 +239,7 @@ test("demo alıcısı: 402 → imza → kesinleşme adımları kaydedilir, iş o
     assert.equal(out.transaction, "SIG_TX_DEMO");
     const job = s.coord.getJob(out.jobId)!;
     assert.equal(job.verifier, "adaptive");
+    assert.equal(job.source, "panel", "panel alıcısının işi kaynağıyla kaydedilir");
     assert.equal(job.payment!.transaction, "SIG_TX_DEMO");
   }));
 

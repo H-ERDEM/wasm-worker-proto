@@ -95,7 +95,7 @@ Varsayılan stratejiler `shared/config`'tedir; iş başına `?scheduler=` ve `?v
 | Yöntem | Yol | Açıklama |
 |---|---|---|
 | `POST` | `/quote` | DAG için fiyat teklifi (üst sınır); iş oluşturmaz, ödeme istemez |
-| `POST` | `/jobs` | DAG gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`; ödeme açıksa ödemesiz istek → `402`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first` |
+| `POST` | `/jobs` | DAG gönderir → `201 {jobId}`; geçersiz DAG ya da bilinmeyen strateji → `400`; ödeme açıksa ödemesiz istek → `402`. İsteğe bağlı `?scheduler=fifo\|fastest\|reputation&verifier=fixed2\|fixed3\|adaptive\|accept_first`; `&source=panel\|cli\|mcp` işi kimin gönderdiğini kaydeder (yoksa `api`; panelde rozet olarak görünür) |
 | `GET` | `/jobs/:id` | Durum, stratejiler, görevler, kabul edilen çıktılar, sınama sayısı, emanet defteri ve worker ödemeleri |
 | `GET` | `/workers` | Bağlı worker'lar: hız, α, β, itibar R, güvenilir mi, `flagged` (sınamada yakalanmış; yalnızca izleme) |
 | `GET` | `/modules` | WASM paket özeti (`moduleHash`) ve modül listesi |
@@ -237,7 +237,7 @@ npm run mcp-inspector     # http://127.0.0.1:6274 açılır → Connect → Tool
 Koordinatör çalışırken **http://127.0.0.1:8787/panel**: terminal yerine tek ekranda canlı demo.
 
 - **Alıcı:** örnek DAG (ara demo için `demo-40.json`, 40 görev) ve doğrulama stratejisi seçilir; "Teklif al" üst sınırı formülüyle gösterir, "Öde ve gönder" x402 adımlarını sırayla gösterir: 402 → imza → zincirde kesinleşme (Solana gezgini bağlantısıyla).
-- **İş:** görev grafiği canlı; her görevin durumu ve kaç eşleşen kopyayla (ya da tek kopyayla) kabul edildiği; iş bitince emanet defteri ve worker ödemeleri.
+- **İş:** panel, kim gönderirse göndersin en son gönderilen işi izler; başlıktaki rozet kaynağını gösterir (Panel, Terminal, MCP ajanı). Görev grafiği canlı; her görevin durumu ve kaç eşleşen kopyayla (ya da tek kopyayla) kabul edildiği; iş bitince emanet defteri ve worker ödemeleri. İş panelden gönderilmediyse Alıcı sütunu bunu ve işin ödeme işlemini gösterir.
 - **Tarayıcılar:** bağlı her tarayıcı, o anki görevi ya da sınama işi, itibar çubuğu (τ çizgisiyle), "tek kopya" ve "yakalandı" rozetleri.
 - **Olaylar:** bağlanma, ödeme, sınama, uyuşmazlık, tek kopya moduna geçiş, geriye dönük iptal, iş sonu.
 

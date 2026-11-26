@@ -82,6 +82,7 @@ interface Job {
   scheduler: Scheduler;
   verifier: Verifier;
   spotIds: number[];
+  source: JobSource;
 }
 
 export interface ResultMessage {
@@ -98,7 +99,15 @@ export interface ResultMessage {
 export interface JobOptions {
   scheduler?: string;
   verifier?: string;
+  /** İşi kim gönderdi (panel, CLI, MCP); yalnızca kayıt ve gösterim içindir, davranışı değiştirmez. */
+  source?: string;
 }
+
+/** İşin kaynağı. Bilinmeyen ya da verilmemiş değer `api` sayılır. */
+export const JOB_SOURCES = ["panel", "cli", "mcp", "api"] as const;
+export type JobSource = (typeof JOB_SOURCES)[number];
+export const jobSource = (s: string | undefined): JobSource =>
+  (JOB_SOURCES as readonly string[]).includes(s ?? "") ? (s as JobSource) : "api";
 
 /** USDC'nin ondalık basamağı: 1 USDC = 10^6 atomik birim. */
 export const USDC_DECIMALS = 6;
@@ -265,12 +274,12 @@ export class Coordinator {
 
     const job: Job = {
       id: jobId, dag, state: "RUNNING", submittedAt: now, completedAt: null, taskKeys: [], children,
-      scheduler, verifier, spotIds: [],
+      scheduler, verifier, spotIds: [], source: jobSource(opts.source),
     };
     this.jobs.set(jobId, job);
     this.db.insert("jobs", {
       id: jobId, dag_json: JSON.stringify(dag), strategy_sched: scheduler.name,
-      strategy_verif: verifier.name, status: job.state, submitted_at: now,
+      strategy_verif: verifier.name, status: job.state, submitted_at: now, source: job.source,
       ...(payment ? { quote_cap: payment.capAtomic, payment_tx: payment.transaction, payer: payment.payer, paid_at: now } : {}),
     });
 
@@ -286,7 +295,7 @@ export class Coordinator {
       job.taskKeys.push(task.key);
       this.db.insert("tasks", { id: task.key, job_id: jobId, dag_task_id: id, module: def.module, cost: task.cost, state: task.state });
     }
-    this.db.log("info", "job_submitted", { jobId, tasks: order.length, scheduler: scheduler.name, verifier: verifier.name });
+    this.db.log("info", "job_submitted", { jobId, tasks: order.length, scheduler: scheduler.name, verifier: verifier.name, source: job.source });
     for (const key of job.taskKeys) {
       const t = this.tasks.get(key)!;
       if ((t.def.deps ?? []).length === 0) this.makeReady(t);
@@ -304,6 +313,8 @@ export class Coordinator {
       status: job.state,
       scheduler: job.scheduler.name,
       verifier: job.verifier.name,
+      /** İşi kim gönderdi: panel | cli | mcp | api. */
+      source: job.source,
       submittedAt: job.submittedAt,
       completedAt: job.completedAt,
       spotchecks: job.spotIds.length,

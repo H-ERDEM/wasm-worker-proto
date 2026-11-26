@@ -85,6 +85,7 @@ test("submit_workflow x402 MCP taşıması: ödemesiz → PaymentRequired; _meta
     const paid = await call(client, "submit_workflow", { dag: dag(3), verifier: "fixed2" }, { [PAYMENT_META_KEY]: payloadFrom(pr, "TX_MCP") });
     assert.ok(!paid.isError, JSON.stringify(paid));
     const jobId = paid.structuredContent!.jobId as string;
+    assert.equal(s.coord.getJob(jobId)!.source, "mcp", "MCP üzerinden gelen iş kaynağıyla kaydedilir");
     const settle = paid._meta![PAYMENT_RESPONSE_META_KEY] as { success: boolean; transaction: string; payer: string };
     assert.deepEqual([settle.success, settle.transaction, settle.payer], [true, "SIG_TX_MCP", FAKE_BUYER]);
 

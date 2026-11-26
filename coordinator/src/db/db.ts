@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   strategy_sched TEXT, strategy_verif TEXT, status TEXT,
   submitted_at INTEGER, completed_at INTEGER,
   quote_cap REAL, payment_tx TEXT, refund_tx TEXT,
-  payer TEXT, paid_at INTEGER, realized_cost REAL, refund_due REAL
+  payer TEXT, paid_at INTEGER, realized_cost REAL, refund_due REAL, source TEXT
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, job_id TEXT NOT NULL, dag_task_id TEXT NOT NULL,
@@ -62,7 +62,7 @@ export class Db {
   /** Eski veritabanı dosyalarına sonradan eklenen sütunları ekler (9. hafta: emanet defteri). */
   private migrate(): void {
     const have = new Set((this.raw.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name));
-    for (const [col, type] of [["payer", "TEXT"], ["paid_at", "INTEGER"], ["realized_cost", "REAL"], ["refund_due", "REAL"]]) {
+    for (const [col, type] of [["payer", "TEXT"], ["paid_at", "INTEGER"], ["realized_cost", "REAL"], ["refund_due", "REAL"], ["source", "TEXT"]]) {
       if (!have.has(col)) this.raw.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${type}`);
     }
   }

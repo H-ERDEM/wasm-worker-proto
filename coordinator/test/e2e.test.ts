@@ -52,6 +52,21 @@ async function waitJob(s: Server, jobId: string, timeoutMs = 5000) {
 const replicaRows = (s: Server, jobId: string) =>
   s.db.all("SELECT r.* FROM replicas r JOIN tasks t ON t.id = r.task_id WHERE t.job_id = ? ORDER BY r.id", jobId);
 
+test("iş kaynağı: ?source= kaydedilir, olaya yazılır; bilinmeyen ya da yoksa 'api'", () =>
+  withServer({}, async (s) => {
+    const post = (q: string) =>
+      fetch(`${s.url}/jobs${q}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(readShared("examples/single-task.json")) })
+        .then((r) => r.json() as Promise<{ jobId: string }>);
+    const cli = (await post("?source=cli")).jobId;
+    const none = (await post("")).jobId;
+    const odd = (await post("?source=hacker")).jobId;
+    assert.deepEqual([cli, none, odd].map((id) => s.coord.getJob(id)!.source), ["cli", "api", "api"]);
+    const row = s.db.all("SELECT source FROM jobs WHERE id = ?", cli)[0];
+    assert.equal(row.source, "cli");
+    const ev = s.db.all("SELECT detail FROM log WHERE event = 'job_submitted'").map((e) => JSON.parse(String(e.detail)).source);
+    assert.deepEqual(ev, ["cli", "api", "api"]);
+  }));
+
 test("1 worker, tek sha_chain görevi → README vektörü, replicas satırı süreyle", () =>
   withServer(FAST, async (s) => {
     const w = startFakeWorker(s.wsUrl);

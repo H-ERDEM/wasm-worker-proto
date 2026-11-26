@@ -51,6 +51,7 @@ class NodeAdapter implements HTTPAdapter {
 export const jobOptionsFrom = (url: URL): JobOptions => ({
   scheduler: url.searchParams.get("scheduler") ?? undefined,
   verifier: url.searchParams.get("verifier") ?? undefined,
+  source: url.searchParams.get("source") ?? undefined,
 });
 
 export type PaidSubmitResult =

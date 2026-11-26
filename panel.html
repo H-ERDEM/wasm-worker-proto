@@ -84,6 +84,11 @@
   .chip.RUNNING { border-color: var(--blue); color: var(--blue); }
   .chip.COMPLETED { border-color: var(--good); color: var(--good-text); }
   .chip.FAILED { border-color: var(--critical); color: var(--critical); }
+  .chip.src { border-color: var(--violet); color: var(--violet); }
+  .other { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--violet); border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+  .other b { color: var(--ink); }
+  .other a { color: var(--blue); }
+  ol.steps.dim { opacity: 0.45; }
   .dag { overflow: auto; max-height: 520px; border: 1px solid var(--hair); border-radius: 8px; padding: 8px; }
   .dag svg { display: block; }
   .empty { color: var(--muted); padding: 40px 12px; text-align: center; }
@@ -144,6 +149,7 @@
     <input type="number" id="budget" min="0.001" step="0.01" value="0.1">
     <div class="row2"><button class="btn" id="quoteBtn">Teklif al</button><button class="btn primary" id="payBtn">Öde ve gönder</button></div>
     <div class="quote" id="quote" hidden></div>
+    <div class="other" id="otherJob" hidden></div>
     <ol class="steps" id="steps" hidden></ol>
     <div class="hint" id="buyerHint"></div>
     <div class="ledger" id="ledger" hidden></div>
@@ -176,10 +182,13 @@
   const short = (s, n = 4) => (s && s.length > 2 * n + 1 ? `${s.slice(0, n)}…${s.slice(-n)}` : s || "");
   const time = (t) => new Date(t).toLocaleTimeString("tr-TR", { hour12: false });
   const STATE_TR = { WAITING: "bekliyor", READY: "hazır", RUNNING: "çalışıyor", ACCEPTED: "kabul", FAILED: "başarısız" };
+  // İşin kaynağı (koordinatör `source`): kim gönderdi.
+  const SOURCE_TR = { panel: "Panel", cli: "Terminal", mcp: "MCP ajanı", api: "API" };
+  const SOURCE_VIA = { panel: "panelden", cli: "terminalden", mcp: "MCP üzerinden", api: "API'den" };
   const VERIF_TR = { fixed2: "sabit 2'li", fixed3: "sabit 3'lü", adaptive: "uyarlanabilir", accept_first: "accept_first" };
   const TAU = 0.95;
 
-  let info = null, examples = [], dag = null, verifier = "adaptive", jobId = null, lastEvent = 0, jobDone = false;
+  let info = null, examples = [], dag = null, verifier = "adaptive", jobId = null, ownJobId = null, lastEvent = 0, jobDone = false;
   let workers = [], names = {}, flash = {};
 
   // ---------- Tarayıcı adları (user agent'tan) ----------
@@ -202,7 +211,7 @@
   }
 
   // ---------- Alıcı ----------
-  function selectedQuery() { return `?verifier=${encodeURIComponent(verifier)}`; }
+  function selectedQuery() { return `?verifier=${encodeURIComponent(verifier)}&source=panel`; }
 
   async function loadExample() {
     const name = $("example").value;
@@ -278,7 +287,7 @@
       if (!info.payment) {
         const res = await fetch(`/jobs${selectedQuery()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dag) });
         const out = await res.json();
-        if (res.ok) setJob(out.jobId); else $("buyerHint").textContent = `Hata: ${out.error}`;
+        if (res.ok) { ownJobId = out.jobId; setJob(out.jobId); } else $("buyerHint").textContent = `Hata: ${out.error}`;
         return;
       }
       await getQuote();
@@ -291,7 +300,7 @@
         renderSteps(out.steps.slice(0, i), i < out.steps.length || !out.ok, i === out.steps.length && !out.ok ? out.error : null);
         await new Promise((r) => setTimeout(r, 450));
       }
-      if (out.ok) setJob(out.jobId);
+      if (out.ok) { ownJobId = out.jobId; setJob(out.jobId); }
     } finally {
       $("payBtn").disabled = !canPay();
     }
@@ -373,6 +382,8 @@
     const elapsed = ((job.completedAt || Date.now()) - job.submittedAt) / 1000;
     head.append(el("b", "", job.jobId), chip, el("span", "", `${VERIF_TR[job.verifier] || job.verifier} · ${job.scheduler}`), el("span", "", `${elapsed.toFixed(1)} s`));
     if (job.clientJobId) head.append(el("span", "", job.clientJobId));
+    if (job.source) head.append(el("span", "chip src", `kaynak: ${SOURCE_TR[job.source] || job.source}`));
+    renderOther(job);
     drawDag(job);
     const acc = job.tasks.filter((t) => t.state === "ACCEPTED");
     const tiles = [
@@ -385,6 +396,27 @@
     tally.textContent = "";
     for (const [k, v] of tiles) { const t = el("div", "tile"); t.append(el("div", "k", k), el("div", "v", v)); tally.append(t); }
     renderLedger(job);
+  }
+
+  // Gösterilen iş panelden gönderilmediyse (CLI, MCP ajanı) Alıcı sütunu bunu söyler; adımlar panelin kendi alımına aittir.
+  function renderOther(job) {
+    const box = $("otherJob");
+    const own = job.jobId === ownJobId;
+    $("steps").classList.toggle("dim", !own);
+    if (own) { box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = "";
+    box.append("Gösterilen iş ", el("b", "", job.jobId), ` ${SOURCE_VIA[job.source] || "başka bir istemciden"} gönderildi, bu paneldeki düğmeyle değil.`);
+    const p = job.payment;
+    if (p && p.transaction) {
+      const a = el("a", "", `${short(p.transaction, 6)} ↗`);
+      a.href = `https://explorer.solana.com/tx/${p.transaction}?cluster=devnet`;
+      a.target = "_blank"; a.rel = "noopener";
+      box.append(el("br"), `Ödeme: ${usdc(p.capAtomic)} USDC üst sınır · ödeyen ${short(p.payer || "")} · işlem `, a);
+    } else {
+      box.append(el("br"), "Ödemesiz iş.");
+    }
+    if (!$("steps").hidden) box.append(el("br"), "Aşağıdaki adımlar panelin kendi son alımına ait.");
   }
 
   function renderLedger(job) {
@@ -472,7 +504,7 @@
     switch (e.event) {
       case "worker_connected": return ["good", `${nameOf(d.id)} bağlandı`];
       case "worker_disconnected": return ["warn", `${nameOf(d.id)} ayrıldı`];
-      case "job_submitted": return ["", `${d.jobId} kuyruğa girdi: ${d.tasks} görev, ${VERIF_TR[d.verifier] || d.verifier}`];
+      case "job_submitted": return [d.source && d.source !== "panel" ? "key" : "", `${d.jobId} kuyruğa girdi: ${d.tasks} görev, ${VERIF_TR[d.verifier] || d.verifier}${d.source ? ` · ${SOURCE_VIA[d.source] || d.source}` : ""}`];
       case "job_paid": return ["pay", `${d.jobId} için ödeme kesinleşti: ${usdc(d.capAtomic)} USDC, işlem ${short(d.transaction, 6)}`];
       case "payment_settle_failed": return ["bad", `ödeme kesinleşmedi: ${d.reason || d.message || ""}`];
       case "spotcheck_assigned": return ["spot", `${nameOf(d.workerId)} bir sınama işi aldı (${d.module})`];
